@@ -1,0 +1,35 @@
+[Unit]
+Description=Genesis RustFS S3 Storage
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/genesis/rustfs/rustfs.env
+
+[Service]
+Type=notify
+NotifyAccess=main
+EnvironmentFile=/etc/genesis/rustfs/rustfs.env
+ExecStart=/usr/bin/rustfs server ${RUSTFS_VOLUMES}
+ExecReload=/bin/kill -s SIGHUP $MAINPID
+Restart=always
+RestartSec=10s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+SendSIGKILL=no
+KillSignal=SIGTERM
+OOMScoreAdjust=-1000
+LimitNOFILE=1048576
+LimitNPROC=32768
+TasksMax=infinity
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

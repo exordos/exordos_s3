@@ -1,0 +1,86 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  Lint:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install requirements
+        run: sudo apt update && sudo apt install --yes libev-dev libvirt-dev
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Ruff check
+        run: |
+          tox -e ruff-check
+  Tests:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    services:
+      postgresql:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: genesis_s3
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: genesis_s3
+          POSTGRES_PASSWORD: pass
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install requirements
+        run: sudo apt update && sudo apt install --yes libev-dev libvirt-dev
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Unit tests
+        run: |
+          tox -e ${{ matrix.python-version }}
+      - name: Functional tests
+        env:
+          DATABASE_URI: "postgresql://genesis_s3:pass@localhost:5432/genesis_s3"
+        run: |
+          tox -e ${{ matrix.python-version }}-functional
+  Coverage:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install requirements
+        run: sudo apt update && sudo apt install --yes libev-dev libvirt-dev
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Coverage
+        run: |
+          tox -e begin,${{ matrix.python-version }},end
