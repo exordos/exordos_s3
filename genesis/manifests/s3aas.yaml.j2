@@ -1,0 +1,287 @@
+name: "s3aas"
+description: "Genesis S3aaS element"
+schema_version: 1
+version: "{{ version }}"
+api_version: "v1"
+
+requirements:
+  core:
+    from_version: "0.0.0"
+  dbaas:
+    from_version: "2.2.4"
+
+resources:
+
+  # IAM
+  $core.iam.organizations:
+    s3aas_organization:
+      name: "S3aaS organization"
+      description: "S3aaS organization"
+
+  $core.iam.projects:
+    s3aas_cp_project:
+      name: "S3aaS control-plane project"
+      organization: $core.iam.organizations.$s3aas_organization:uuid
+      description: "S3aaS control-plane project"
+    s3aas_project:
+      name: "S3aaS project"
+      organization: $core.iam.organizations.$s3aas_organization:uuid
+      description: "S3aaS project"
+
+  $core.iam.permissions:
+    s3_instance_create:
+      name: "genesis_s3.s3_instance.create"
+    s3_instance_read:
+      name: "genesis_s3.s3_instance.read"
+    s3_instance_update:
+      name: "genesis_s3.s3_instance.update"
+    s3_instance_delete:
+      name: "genesis_s3.s3_instance.delete"
+    bucket_create:
+      name: "genesis_s3.bucket.create"
+    bucket_read:
+      name: "genesis_s3.bucket.read"
+    bucket_update:
+      name: "genesis_s3.bucket.update"
+    bucket_delete:
+      name: "genesis_s3.bucket.delete"
+    policy_create:
+      name: "genesis_s3.policy.create"
+    policy_read:
+      name: "genesis_s3.policy.read"
+    policy_update:
+      name: "genesis_s3.policy.update"
+    policy_delete:
+      name: "genesis_s3.policy.delete"
+    user_create:
+      name: "genesis_s3.user.create"
+    user_read:
+      name: "genesis_s3.user.read"
+    user_update:
+      name: "genesis_s3.user.update"
+    user_delete:
+      name: "genesis_s3.user.delete"
+    access_key_create:
+      name: "genesis_s3.access_key.create"
+    access_key_read:
+      name: "genesis_s3.access_key.read"
+    access_key_update:
+      name: "genesis_s3.access_key.update"
+    access_key_delete:
+      name: "genesis_s3.access_key.delete"
+    s3_version_read:
+      name: "genesis_s3.s3_version.read"
+
+  $core.iam.permissionbinding:
+    s3_instance_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$s3_instance_create:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    s3_instance_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$s3_instance_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    s3_instance_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$s3_instance_update:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    s3_instance_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$s3_instance_delete:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    bucket_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$bucket_create:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    bucket_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$bucket_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    bucket_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$bucket_update:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    bucket_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$bucket_delete:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    policy_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$policy_create:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    policy_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$policy_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    policy_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$policy_update:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    policy_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$policy_delete:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    user_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$user_create:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    user_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$user_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    user_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$user_update:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    user_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$user_delete:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    access_key_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$access_key_create:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    access_key_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$access_key_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    access_key_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$access_key_update:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    access_key_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$access_key_delete:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+    s3_version_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$s3_version_read:uuid
+      project_id: $core.iam.projects.$s3aas_project:uuid
+
+  $core.iam.users:
+    s3aas_user:
+      uuid: 362df68b-c1b6-47bb-95e8-44fceed037d9
+      username: s3aas
+      first_name: "S3aaS system user"
+      last_name: "S3aaS system user"
+      email: "noreply+s3aas@genesis-core.tech"
+      password: $core.secret.passwords.$s3aas_user_password:value
+
+  $core.iam.rolebinding:
+    s3aas_role_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      # Hack, should be fixed
+      user: 362df68b-c1b6-47bb-95e8-44fceed037d9
+      project: $core.iam.projects.$s3aas_project:uuid
+
+  # DB
+  $dbaas.types.postgres.instances:
+    s3aas_cluster_pg:
+      name: "s3aas-pg-cluster"
+      nodes_number: 1
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      cpu: 1
+      ram: 2048
+      disk_size: 20
+      version: $s3aas.imports.$pg18:uuid
+
+  $dbaas.types.postgres.instances.$s3aas_cluster_pg.users:
+    s3aas_db_user:
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      name: s3aas_db_user
+      password: $core.secret.passwords.$s3aas_db_password:value
+      instance: $dbaas.types.postgres.instances.$s3aas_cluster_pg:uuid
+
+  $dbaas.types.postgres.instances.$s3aas_cluster_pg.databases:
+    s3aas_db:
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      name: s3aas_db
+      owner: $dbaas.types.postgres.instances.$s3aas_cluster_pg.users.$s3aas_db_user:uuid
+      instance: $dbaas.types.postgres.instances.$s3aas_cluster_pg:uuid
+
+  # Secret
+  $core.secret.passwords:
+    s3aas_db_password:
+      name: s3aas_db_password
+      description: "S3aaS DB password"
+      constructor:
+        kind: plain
+      method: AUTO_HEX
+
+    s3aas_user_password:
+      name: s3aas_user_password
+      description: "S3aaS system user password"
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      constructor:
+        kind: plain
+      method: AUTO_HEX
+
+  # Compute
+  $core.compute.nodes:
+    s3aas_cp:
+      name: s3aas-cp
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      cores: 1
+      ram: 2048
+      disk_spec:
+        kind: "disks"
+        disks:
+          - size: 6
+            image: http://10.20.0.1:8000/images/genesis-s3.raw.gz  #"{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3.raw.gz"
+            label: root
+
+  # Config
+  $core.config.configs:
+    s3aas_cp_config:
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      path: /etc/genesis_init.txt
+      target:
+        kind: node
+        node: $core.compute.nodes.$s3aas_cp:uuid
+      body:
+        kind: text
+        content: |
+          f"
+          IAM_USER_NAME={$core.iam.users.$s3aas_user:username}
+          IAM_USER_PASS={$core.secret.passwords.$s3aas_user_password:value}
+          PROJECT_ID={$core.iam.projects.$s3aas_project:uuid}
+          GC_PG_USER={$dbaas.types.postgres.instances.$s3aas_cluster_pg.users.$s3aas_db_user:name}
+          GC_PG_PASS={$core.secret.passwords.$s3aas_db_password:value}
+          GC_PG_DB={$dbaas.types.postgres.instances.$s3aas_cluster_pg.databases.$s3aas_db:name}
+          GC_PG_ENDPOINTS={$dbaas.types.postgres.instances.$s3aas_cluster_pg:join(ipsv4)}
+          GC_HS256_JWKS_ENCRYPTION_KEY={$s3aas.imports.$var_hs256_jwks_encryption_key:value}
+          "
+
+  # S3aaS
+  $s3aas.types.s3.versions:
+    rustfs_1:
+      name: "rustfs_1"
+      image: http://10.20.0.1:8000/images/genesis-s3-dp.raw.gz  #"{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3-dp.raw.gz"
+
+  $s3aas.imports.$core_local_domain.records:
+    s3aas_cp:
+      domain: "$s3aas.imports.$core_local_domain:uuid"
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      type: "A"
+      record:
+        kind: "A"
+        name: "s3aas-cp"
+        address: "$core.compute.nodes.$s3aas_cp:default_network:ipv4"
+
+imports:
+  pg18:
+    element: "$dbaas"
+    kind: "resource"
+    link: "$dbaas.types.postgres.versions.$pg18"
+  core_local_domain:
+    element: "$core"
+    kind: "resource"
+    link: "$core.dns.domains.$local_domain"
+  var_hs256_jwks_encryption_key:
+    element: "$core"
+    kind: "resource"
+    link: "$core.vs.variables.$hs256_jwks_encryption_key"
+
+exports:
+  rustfs_1:
+    link: "$s3aas.types.s3.versions.$rustfs_1"

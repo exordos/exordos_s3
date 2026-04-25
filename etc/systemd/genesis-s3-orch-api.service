@@ -1,0 +1,14 @@
+[Unit]
+Description=Genesis S3 Orch API
+After=network-online.target
+
+[Service]
+TimeoutStopSec=5
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+ExecStartPre=/bin/sleep 2
+ExecStart=genesis-s3-orch-api --config-file /etc/genesis_s3/genesis_s3.conf
+
+[Install]
+WantedBy=multi-user.target

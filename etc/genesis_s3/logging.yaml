@@ -1,0 +1,28 @@
+version: 1
+formatters:
+  aardvark:
+    format: '%(asctime)15s.%(msecs)03d %(processName)s pid:%(process)d tid:%(thread)d %(levelname)s %(name)s:%(lineno)d %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+
+handlers:
+  console:
+    class : logging.StreamHandler
+    formatter: aardvark
+    stream  : ext://sys.stdout
+
+loggers:
+  camel:
+    handlers: [console]
+    level: WARNING
+    propagate: False
+
+  genesis_s3: {}
+  bjoern: {}
+  gcl_looper: {}
+  gcl_sdk: {}
+  restalchemy: {}
+  sentry_sdk: {}
+
+root:
+  handlers: [console]
+  level: INFO
