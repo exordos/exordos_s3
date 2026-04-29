@@ -1,4 +1,4 @@
-#    Copyright 2025 Genesis Corporation.
+#    Copyright 2025-2026 Genesis Corporation.
 #
 #    All Rights Reserved.
 #
@@ -374,7 +374,7 @@ class AdminClient(singletons.InheritSingleton):
 
     def add_user(self, access_key, secret_key):
         try:
-            encoded_key = urllib.parse.quote(access_key, safe="")
+            encoded_key = urllib.parse.quote(access_key, safe="-._~")
             self._admin_request(
                 "PUT",
                 f"/add-user?accessKey={encoded_key}",
@@ -387,27 +387,77 @@ class AdminClient(singletons.InheritSingleton):
 
     def remove_user(self, access_key):
         try:
-            encoded_key = urllib.parse.quote(access_key, safe="")
+            encoded_key = urllib.parse.quote(access_key, safe="-._~")
             self._admin_request("DELETE", f"/remove-user?accessKey={encoded_key}")
             LOG.info("User %s removed", access_key)
         except Exception:
             LOG.warning("Failed to remove user %s", access_key, exc_info=True)
 
     def set_user_policies(self, access_key, policy_names):
-        """Attach multiple policies to a user using policy attach endpoint."""
+        """Set all policies for a user (overwrites existing).
+
+        Sends comma-separated policy names in a single request,
+        matching RustFS CLI behavior.
+        """
         try:
-            # RustFS supports comma-separated policy names, each must be URL-encoded
-            encoded_policies = [urllib.parse.quote(p, safe="") for p in policy_names]
-            policy_list = ",".join(encoded_policies)
-            encoded_user = urllib.parse.quote(access_key, safe="")
+            policy_list = ",".join(policy_names)
+            encoded_policy = urllib.parse.quote(policy_list, safe="-._~")
+            encoded_user = urllib.parse.quote(access_key, safe="-._~")
             self._admin_request(
                 "PUT",
-                f"/set-user-or-group-policy?policyName={policy_list}&userOrGroup={encoded_user}&isGroup=false",
+                f"/set-user-or-group-policy?policyName={encoded_policy}&userOrGroup={encoded_user}&isGroup=false",
             )
             LOG.info("User %s policies set to %s", access_key, ", ".join(policy_names))
         except Exception:
             LOG.error("Failed to set policies for user %s", access_key, exc_info=True)
             raise
+
+    # -- Bucket quota operations (admin API) --
+
+    def set_bucket_quota(self, bucket_name, quota_bytes):
+        """Set bucket quota in bytes. 0 means no quota."""
+        try:
+            encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
+            body = json.dumps({"quota": quota_bytes, "quotaType": "HARD"}).encode(
+                "utf-8"
+            )
+            self._admin_request(
+                "PUT",
+                f"/quota/{encoded_bucket}",
+                body=body,
+            )
+            LOG.info("Bucket %s quota set to %d bytes", bucket_name, quota_bytes)
+        except Exception:
+            LOG.error(
+                "Failed to set quota for bucket %s", bucket_name, exc_info=True
+            )
+            raise
+
+    def get_bucket_quota(self, bucket_name):
+        """Get bucket quota in bytes. Returns 0 if no quota set."""
+        try:
+            encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
+            resp = self._admin_request("GET", f"/quota/{encoded_bucket}")
+            data = resp.json()
+            # RustFS returns {"quota": <bytes>, "size": <bytes>, "quotatype": "hard"}
+            return data.get("quota", 0) or 0
+        except Exception:
+            LOG.debug(
+                "Failed to get quota for bucket %s, assuming no quota",
+                bucket_name, exc_info=True,
+            )
+            return 0
+
+    def clear_bucket_quota(self, bucket_name):
+        """Remove bucket quota."""
+        try:
+            encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
+            self._admin_request("DELETE", f"/quota/{encoded_bucket}")
+            LOG.info("Bucket %s quota cleared", bucket_name)
+        except Exception:
+            LOG.warning(
+                "Failed to clear quota for bucket %s", bucket_name, exc_info=True
+            )
 
     # -- Policy operations (admin API) --
 
@@ -430,7 +480,7 @@ class AdminClient(singletons.InheritSingleton):
             # content is a dict, convert to JSON string for RustFS
             if isinstance(content, dict):
                 content = json.dumps(content)
-            encoded_name = urllib.parse.quote(name, safe="")
+            encoded_name = urllib.parse.quote(name, safe="-._~")
             self._admin_request(
                 "PUT",
                 f"/add-canned-policy?name={encoded_name}",
@@ -443,7 +493,7 @@ class AdminClient(singletons.InheritSingleton):
 
     def remove_policy(self, name):
         try:
-            encoded_name = urllib.parse.quote(name, safe="")
+            encoded_name = urllib.parse.quote(name, safe="-._~")
             self._admin_request("DELETE", f"/remove-canned-policy?name={encoded_name}")
             LOG.info("Policy %s removed", name)
         except Exception:
@@ -504,7 +554,7 @@ class S3Instance(meta.MetaDataPlaneModel):
     def _fill_actual_policies(self):
         actual = self.mc.list_policies()
         self.policies = {
-            name: {"name": name, "content": p.get("policy", {}), "builtin": False}
+            name: {"name": name, "content": p.get("policy", {})}
             for name, p in actual.items()
         }
 
@@ -516,13 +566,12 @@ class S3Instance(meta.MetaDataPlaneModel):
         target_users = set(self.access_keys.keys())
         actual_set = set(actual_users.keys())
 
-        def _target_policy_str(user_model):
-            policies = (
+        def _target_policies(user_model):
+            return (
                 list(user_model["policies"].keys())
                 if user_model.get("policies")
                 else []
             )
-            return policies, ",".join(sorted(policies)) if policies else ""
 
         # Create access-key users (regular RustFS users with parent's
         # policies) — RustFS service accounts always inherit from the
@@ -534,7 +583,7 @@ class S3Instance(meta.MetaDataPlaneModel):
 
             parent_user = k.get("user_name")
             if parent_user and parent_user in self.users:
-                policy_names, _ = _target_policy_str(self.users[parent_user])
+                policy_names = _target_policies(self.users[parent_user])
                 if policy_names:
                     self.mc.set_user_policies(ak, policy_names)
 
@@ -543,16 +592,13 @@ class S3Instance(meta.MetaDataPlaneModel):
             k = self.access_keys[ak]
             parent_user = k.get("user_name")
             if parent_user and parent_user in self.users:
-                target_policies, target_policy_str = _target_policy_str(
-                    self.users[parent_user]
-                )
-                current_policy_names = [
+                target_policies = sorted(_target_policies(self.users[parent_user]))
+                current_policy_names = sorted(
                     name
                     for name in (actual_users[ak].get("policyName") or "").split(",")
                     if name
-                ]
-                current_policy_str = ",".join(sorted(current_policy_names))
-                if current_policy_str != target_policy_str:
+                )
+                if current_policy_names != target_policies:
                     self.mc.set_user_policies(ak, target_policies)
 
         # Remove users no longer in target
@@ -609,6 +655,14 @@ class S3Instance(meta.MetaDataPlaneModel):
             if actual_state.get("public") != target_public:
                 self.mc.set_bucket_public_readonly(bname, target_public)
 
+            target_quota = b.get("quota_bytes", 0)
+            actual_quota = self.mc.get_bucket_quota(bname)
+            if actual_quota != target_quota:
+                if target_quota > 0:
+                    self.mc.set_bucket_quota(bname, target_quota)
+                else:
+                    self.mc.clear_bucket_quota(bname)
+
         # Remove buckets no longer in target
         for aname in actual_set - target_buckets:
             self.mc.remove_bucket(aname)
@@ -620,7 +674,7 @@ class S3Instance(meta.MetaDataPlaneModel):
             state = self.mc.get_bucket_state(name)
             self.buckets[name] = {
                 "versioning_enabled": state.get("versioning_enabled", False),
-                "quota_bytes": 0,
+                "quota_bytes": self.mc.get_bucket_quota(name),
                 "object_lock_enabled": state.get("object_lock_enabled", False),
                 "public": state.get("public", False),
                 "default_retention_mode": state.get("default_retention_mode"),

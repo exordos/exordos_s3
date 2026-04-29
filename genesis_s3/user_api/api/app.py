@@ -28,8 +28,6 @@ from genesis_s3.user_api.api import versions
 from genesis_s3 import version as app_version
 
 skip_auth_endpoints = [
-    iam_mw.EndpointComparator("/"),
-    iam_mw.EndpointComparator("/v1/"),
 ]
 
 

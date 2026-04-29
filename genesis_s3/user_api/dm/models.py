@@ -1,4 +1,4 @@
-#    Copyright 2025 Genesis Corporation.
+#    Copyright 2025-2026 Genesis Corporation.
 #
 #    All Rights Reserved.
 #
@@ -31,7 +31,7 @@ from genesis_s3.common import utils as u
 
 ACCESS_KEY_LENGTH = 20
 SECRET_KEY_LENGTH = 40
-ROOT_SECRET_LENGTH = 40
+ROOT_SECRET_LENGTH = 64
 ACCESS_KEY_ALPHABET = string.ascii_uppercase + string.digits
 SECRET_KEY_ALPHABET = string.ascii_letters + string.digits
 ROOT_SECRET_ALPHABET = string.ascii_letters + string.digits + "!@#$%^&*"
@@ -211,11 +211,11 @@ class S3Policy(InstanceChildModel):
         default=S3Status.ACTIVE.value,
     )
     content = properties.property(types.Dict(), required=True)
-    builtin = properties.property(types.Boolean(), default=False)
 
     def delete(self, session=None, **kwargs):
-        if self.builtin:
-            raise ValueError("Cannot delete builtin policy")
+        u.remove_nested_dm(
+            S3UserPolicyAttachment, "policy", self, session=session
+        )
         return super().delete(session=session, **kwargs)
 
 
@@ -267,9 +267,6 @@ class S3UserPolicyAttachment(
 
     user = relationships.relationship(S3User, required=True)
     policy = relationships.relationship(S3Policy, required=True)
-
-    def delete(self, session=None, **kwargs):
-        return super().delete(session=session, **kwargs)
 
 
 class S3AccessKey(
