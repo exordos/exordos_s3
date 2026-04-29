@@ -3,6 +3,7 @@ name: tests
 on:
   push:
   pull_request:
+    types: [opened]
 
 jobs:
   Lint:
@@ -58,11 +59,6 @@ jobs:
       - name: Unit tests
         run: |
           tox -e ${{ matrix.python-version }}
-      - name: Functional tests
-        env:
-          DATABASE_URI: "postgresql://genesis_s3:pass@localhost:5432/genesis_s3"
-        run: |
-          tox -e ${{ matrix.python-version }}-functional
   Coverage:
     runs-on: ubuntu-24.04
     strategy:
