@@ -227,7 +227,7 @@ resources:
         kind: "disks"
         disks:
           - size: 6
-            image: http://10.20.0.1:8000/images/genesis-s3.raw.gz  #"{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3.raw.gz"
+            image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3.raw.gz"
             label: root
 
   # Config
@@ -256,7 +256,7 @@ resources:
   $s3aas.types.s3.versions:
     rustfs_1:
       name: "rustfs_1"
-      image: http://10.20.0.1:8000/images/genesis-s3-dp.raw.gz  #"{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3-dp.raw.gz"
+      image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3-dp.raw.gz"
 
   $s3aas.imports.$core_local_domain.records:
     s3aas_cp:

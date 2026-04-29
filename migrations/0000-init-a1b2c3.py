@@ -1,4 +1,4 @@
-#    Copyright 2025 Genesis Corporation.
+#    Copyright 2025-2026 Genesis Corporation.
 #
 #    All Rights Reserved.
 #
@@ -94,7 +94,6 @@ CREATE TABLE s3_policies (
     status VARCHAR(64) NOT NULL DEFAULT 'ACTIVE',
     instance UUID NOT NULL,
     content JSONB NOT NULL,
-    builtin BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     FOREIGN KEY (instance) REFERENCES s3_instances(uuid)

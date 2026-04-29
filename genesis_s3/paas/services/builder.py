@@ -1,4 +1,4 @@
-#    Copyright 2025 Genesis Corporation.
+#    Copyright 2025-2026 Genesis Corporation.
 #
 #    All Rights Reserved.
 #
@@ -77,7 +77,6 @@ class S3InstanceBuilder(PaaSBuilder, oslo_base.OsloConfigurableService):
             str(p.uuid): {
                 "name": p.name,
                 "content": p.content,
-                "builtin": p.builtin,
             }
             for p in instance.get_policies()
         }

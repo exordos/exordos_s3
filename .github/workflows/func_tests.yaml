@@ -1,0 +1,85 @@
+name: func_tests
+
+on:
+  push:
+  pull_request:
+
+env:
+  PACKER_VERSION: "latest"
+  PYTHON_VERSION: "3.12"
+  CORE_BRANCH: "master"
+
+jobs:
+  Func_tests:
+    # Skip push builds if there's an open PR for this branch
+    if: github.event_name \!= 'push' || github.event.pull_request == null
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup `packer`
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+      - name: Set up QEMU
+        run: |
+          sudo apt -y update
+          sudo apt install -y qemu-system-amd64 qemu-kvm qemu-utils libvirt-daemon-system libvirt-dev mkisofs zip
+          sudo adduser $USER libvirt
+          sudo adduser $USER kvm
+          sudo chmod +666 /dev/kvm
+          sudo virsh pool-define-as default dir --target "/var/lib/libvirt/images/"
+          sudo virsh pool-build default
+          sudo virsh pool-start default
+          sudo virsh pool-autostart default
+          sudo sh -c 'printf "listen_tcp = 1\nlisten_addr = \"0.0.0.0\"\nauth_tcp = \"none\"\n" >> /etc/libvirt/libvirtd.conf'
+          sudo systemctl stop libvirtd
+          sudo systemctl enable --now libvirtd-tcp.socket
+          sudo systemctl start libvirtd
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Install genesis cli
+        run: |
+          curl -fsSL https://repository.genesis-core.tech/install.sh | sudo sh
+      - name: Build genesis core
+        run: |
+          cd ../
+          git clone -b "$CORE_BRANCH" https://github.com/infraguys/genesis_core.git
+          cd ./genesis_core
+          export ALLOW_USER_PASSWD=true
+          export FREQUENT_LOG_VACUUM=true
+          export GEN_IMG_FORMAT_CORE=raw
+          genesis build -f . --inventory --manifest-var repository=https://repository.genesis-core.tech
+          cd $GITHUB_WORKSPACE
+      - name: Bootstrap genesis_core
+        run: |
+          cd ../genesis_core
+          export GEN_IMG_FORMAT_CORE=qcow2
+          genesis bootstrap -i ./output/inventory.json -f -m core --hyper-connection-uri qemu+tcp://10.20.0.1/system --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
+          export ADMIN_PASSWORD=$(cat ./admin_password.txt)
+          cd -
+      - name: Start PaaS
+        run: |
+          tox -e develop
+          .tox/develop/bin/python genesis_s3/tests/functional/prepare_env.py --project-dir . --output-dir /tmp/s3aas-build --endpoint http://10.20.0.2:11010 --username admin --password $ADMIN_PASSWORD
+      - name: Find S3aaS CP IP
+        run: |
+          export S3AAS_CP_IP=$(genesis -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD list instances | jq -r '.[] | select(.kind=="s3aas_cp") | .ips[0]')
+          echo "S3AAS_CP_IP=$S3AAS_CP_IP" >> $GITHUB_ENV
+          echo "Found S3aaS CP IP: $S3AAS_CP_IP"
+      - name: Run functional tests
+        env:
+          GENESIS_ENDPOINT: http://10.20.0.2:11010
+          GENESIS_USERNAME: admin
+          GENESIS_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+          GENESIS_S3_CP_URL: http://${{ env.S3AAS_CP_IP }}:8080
+          GENESIS_POLL_TIMEOUT: 600
+          GENESIS_POLL_INTERVAL: 15
+        run: |
+          tox -e ${PYTHON_VERSION}-functional
+

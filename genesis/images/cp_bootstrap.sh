@@ -24,6 +24,8 @@ GC_PATH="/opt/genesis_s3"
 SERVICE_CONFIG="/etc/genesis_s3/genesis_s3.conf"
 CORE_AGENT_CONFIG="/etc/genesis_s3/core_agent.conf"
 
+source /usr/local/lib/genesis/lib_bootstrap.sh
+
 while [ ! -f /etc/genesis_init.txt ]; do sleep 1; done
 source /etc/genesis_init.txt
 
@@ -44,26 +46,6 @@ while [ -z "$GC_PG_ENDPOINTS" ]; do
     source /etc/genesis_init.txt
     export GC_PG_ENDPOINTS="${GC_PG_ENDPOINTS:-}"
 done
-
-# Generate config from template, if it doesn't exist
-try_generate_config() {
-    local config_file="$1"
-    local config_template="${config_file}.j2"
-
-    if [[ -f "$config_file" ]]; then
-        echo "Config file $config_file already exists, do nothing"
-        return 0
-    fi
-
-    if [[ ! -f "$config_template" ]]; then
-        echo "ERROR: Config template $config_template not found"
-        return 1
-    fi
-
-    j2 "$config_template" -o "$config_file"
-
-    echo "Config file created at $config_file"
-}
 
 if [[ ! -f $SERVICE_CONFIG ]]; then
     try_generate_config "$SERVICE_CONFIG"

@@ -39,9 +39,6 @@ sudo apt install -y \
     j2cli \
     postgresql-client-16
 
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source "$HOME"/.local/bin/env
-
 # Install genesis s3
 sudo mkdir -p $GC_CFG_DIR
 sudo cp "$GC_PATH/etc/genesis_s3/genesis_s3.conf.j2" $GC_CFG_DIR/

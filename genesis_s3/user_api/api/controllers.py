@@ -1,4 +1,4 @@
-#    Copyright 2025 Genesis Corporation.
+#    Copyright 2025-2026 Genesis Corporation.
 #
 #    All Rights Reserved.
 #
@@ -126,7 +126,7 @@ class S3PolicyController(
         fields_permissions=field_p.FieldsPermissions(
             default=field_p.Permissions.RW,
             fields={
-                "builtin": {constants.ALL: field_p.Permissions.RO},
+                "status": {constants.ALL: field_p.Permissions.RO},
             },
         ),
     )
@@ -146,6 +146,9 @@ class S3UserController(
         process_filters=True,
         fields_permissions=field_p.FieldsPermissions(
             default=field_p.Permissions.RW,
+            fields={
+                "status": {constants.ALL: field_p.Permissions.RO},
+            },
         ),
     )
 
@@ -166,7 +169,10 @@ class S3AccessKeyController(
             default=field_p.Permissions.RW,
             fields={
                 "access_key": {constants.ALL: field_p.Permissions.RO},
-                "secret_key": {constants.ALL: field_p.Permissions.HIDDEN},
+                "secret_key": {
+                    constants.ALL: field_p.Permissions.HIDDEN,
+                    constants.CREATE: field_p.Permissions.RW,
+                },
                 "status": {constants.ALL: field_p.Permissions.RO},
             },
         ),
@@ -191,6 +197,7 @@ class S3UserPolicyAttachmentController(
                 "uuid": {constants.ALL: field_p.Permissions.RO},
                 "created_at": {constants.ALL: field_p.Permissions.RO},
                 "updated_at": {constants.ALL: field_p.Permissions.RO},
+                "status": {constants.ALL: field_p.Permissions.RO},
             },
         ),
     )

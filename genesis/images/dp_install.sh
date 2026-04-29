@@ -39,8 +39,6 @@ sudo apt update
 sudo apt dist-upgrade -y
 sudo apt install -y \
     libev-dev unzip
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source "$HOME"/.local/bin/env
 
 # Install rustfs binary
 ARCH=$(uname -m)
