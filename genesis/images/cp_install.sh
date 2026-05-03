@@ -21,8 +21,8 @@ set -x
 set -o pipefail
 
 
-GC_PATH="/opt/genesis_s3"
-GC_CFG_DIR=/etc/genesis_s3
+GC_PATH="/opt/exordos_s3"
+GC_CFG_DIR=/etc/exordos_s3
 VENV_PATH="$GC_PATH/.venv"
 BOOTSTRAP_PATH="/var/lib/genesis/bootstrap/scripts"
 
@@ -39,11 +39,11 @@ sudo apt install -y \
     j2cli \
     postgresql-client-16
 
-# Install genesis s3
+# Install exordos s3
 sudo mkdir -p $GC_CFG_DIR
-sudo cp "$GC_PATH/etc/genesis_s3/genesis_s3.conf.j2" $GC_CFG_DIR/
-sudo cp "$GC_PATH/etc/genesis_s3/core_agent.conf.j2" $GC_CFG_DIR/
-sudo cp "$GC_PATH/etc/genesis_s3/logging.yaml" $GC_CFG_DIR/
+sudo cp "$GC_PATH/etc/exordos_s3/exordos_s3.conf.j2" $GC_CFG_DIR/
+sudo cp "$GC_PATH/etc/exordos_s3/core_agent.conf.j2" $GC_CFG_DIR/
+sudo cp "$GC_PATH/etc/exordos_s3/logging.yaml" $GC_CFG_DIR/
 sudo cp "$GC_PATH/genesis/images/cp_bootstrap.sh" $BOOTSTRAP_PATH/0100-gc-bootstrap.sh
 
 cd "$GC_PATH"
@@ -58,15 +58,15 @@ fi
 deactivate
 
 # Create links to venv
-sudo ln -sf "$VENV_PATH/bin/genesis-s3-gservice" "/usr/bin/genesis-s3-gservice"
-sudo ln -sf "$VENV_PATH/bin/genesis-s3-user-api" "/usr/bin/genesis-s3-user-api"
-sudo ln -sf "$VENV_PATH/bin/genesis-s3-status-api" "/usr/bin/genesis-s3-status-api"
-sudo ln -sf "$VENV_PATH/bin/genesis-s3-orch-api" "/usr/bin/genesis-s3-orch-api"
+sudo ln -sf "$VENV_PATH/bin/exordos-s3-gservice" "/usr/bin/exordos-s3-gservice"
+sudo ln -sf "$VENV_PATH/bin/exordos-s3-user-api" "/usr/bin/exordos-s3-user-api"
+sudo ln -sf "$VENV_PATH/bin/exordos-s3-status-api" "/usr/bin/exordos-s3-status-api"
+sudo ln -sf "$VENV_PATH/bin/exordos-s3-orch-api" "/usr/bin/exordos-s3-orch-api"
 sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent-db-back" "/usr/bin/genesis-universal-agent-db-back"
 
 # Install Systemd service files
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-gservice.service" $SYSTEMD_SERVICE_DIR
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-user-api.service" $SYSTEMD_SERVICE_DIR
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-status-api.service" $SYSTEMD_SERVICE_DIR
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-orch-api.service" $SYSTEMD_SERVICE_DIR
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-core-agent.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-gservice.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-user-api.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-status-api.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-orch-api.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-core-agent.service" $SYSTEMD_SERVICE_DIR

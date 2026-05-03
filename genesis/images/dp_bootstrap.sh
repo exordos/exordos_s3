@@ -36,8 +36,8 @@ if [[ -n "$PERSISTENT_DISK" ]]; then
     persist_migrate_complete
 fi
 
-# Enable genesis s3 services
+# Enable exordos s3 services
 sudo systemctl enable --now \
-    genesis-rustfs
+    exordos-rustfs
 
 echo "Bootstrap completed successfully."

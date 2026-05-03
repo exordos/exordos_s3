@@ -66,17 +66,17 @@ jobs:
           echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
           sudo curl http://repository.genesis-core.tech:8081/1af41041/latest/1af41041.rom --output /usr/share/qemu/1af41041.rom
           cd -
-      - name: Wait for Genesis Core API
+      - name: Wait for Exordos Core API
         run: |
           for i in {1..60}; do
             if curl -s -o /dev/null -w "%{http_code}" http://10.20.0.2:11010 | grep -q "200\|401\|403"; then
-              echo "Genesis Core API is ready"
+              echo "Exordos Core API is ready"
               exit 0
             fi
-            echo "Waiting for Genesis Core API... ($i/60)"
+            echo "Waiting for Exordos Core API... ($i/60)"
             sleep 5
           done
-          echo "Genesis Core API did not become ready"
+          echo "Exordos Core API did not become ready"
           exit 1
       - name: Set hypervisor with overbooking
         run: |
@@ -121,7 +121,7 @@ jobs:
           tox -e develop
           # TODO: to use .raw we need to patch manifest
           # export GEN_IMG_FORMAT_CORE=raw
-          .tox/develop/bin/python genesis_s3/tests/functional/prepare_env.py --project-dir . --output-dir /tmp/s3aas-build --endpoint http://10.20.0.2:11010 --username admin --password $ADMIN_PASSWORD
+          .tox/develop/bin/python exordos_s3/tests/functional/prepare_env.py --project-dir . --output-dir /tmp/s3aas-build --endpoint http://10.20.0.2:11010 --username admin --password $ADMIN_PASSWORD
       - name: Find S3aaS CP IP
         run: |
           sleep 6
@@ -145,12 +145,12 @@ jobs:
           exit 1
       - name: Run functional tests
         env:
-          GENESIS_ENDPOINT: http://10.20.0.2:11010
-          GENESIS_USERNAME: admin
-          GENESIS_PASSWORD: ${{ env.ADMIN_PASSWORD }}
-          GENESIS_S3_CP_URL: http://${{ env.S3AAS_CP_IP }}:8080
-          GENESIS_POLL_TIMEOUT: 600
-          GENESIS_POLL_INTERVAL: 15
+          EXORDOS_ENDPOINT: http://10.20.0.2:11010
+          EXORDOS_USERNAME: admin
+          EXORDOS_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+          EXORDOS_S3_CP_URL: http://${{ env.S3AAS_CP_IP }}:8080
+          EXORDOS_POLL_TIMEOUT: 600
+          EXORDOS_POLL_INTERVAL: 15
         run: |
           tox -e ${PYTHON_VERSION}-functional
       - name: Setup tmate session

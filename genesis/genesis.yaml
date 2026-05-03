@@ -19,9 +19,9 @@ build:
 
   # Dependencies of the project
   deps:
-    - dst: /opt/genesis_s3
+    - dst: /opt/exordos_s3
       path:
-        src: ../../genesis_s3
+        src: ../../exordos_s3
       exclude:
         - .venv
         - .tox
@@ -37,7 +37,7 @@ build:
     # List of images in the element
     - manifest: manifests/s3aas.yaml.j2
       images:
-      - name: genesis-s3
+      - name: exordos-s3
         format: GEN_IMG_FORMAT_CORE=gz
         profile: genesis_base
         script: images/cp_install.sh
@@ -45,7 +45,7 @@ build:
         # Override image build parameters, for instance disk size
         override:
           disk_size: "6G"
-      - name: genesis-s3-dp
+      - name: exordos-s3-dp
         format: GEN_IMG_FORMAT_CORE=gz
         profile: genesis_base
         script: images/dp_install.sh

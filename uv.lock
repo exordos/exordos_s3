@@ -694,7 +694,7 @@ wheels = [
 ]
 
 [[package]]
-name = "genesis-s3"
+name = "exordos-s3"
 source = { editable = "." }
 dependencies = [
     { name = "bjoern" },

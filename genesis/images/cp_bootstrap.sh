@@ -20,30 +20,30 @@ set -eu
 set -x
 set -o pipefail
 
-GC_PATH="/opt/genesis_s3"
-SERVICE_CONFIG="/etc/genesis_s3/genesis_s3.conf"
-CORE_AGENT_CONFIG="/etc/genesis_s3/core_agent.conf"
+GC_PATH="/opt/exordos_s3"
+SERVICE_CONFIG="/etc/exordos_s3/exordos_s3.conf"
+CORE_AGENT_CONFIG="/etc/exordos_s3/core_agent.conf"
 
 source /usr/local/lib/genesis/lib_bootstrap.sh
 
-while [ ! -f /etc/genesis_init.txt ]; do sleep 1; done
-source /etc/genesis_init.txt
+while [ ! -f /etc/exordos_init.txt ]; do sleep 1; done
+source /etc/exordos_init.txt
 
-export IAM_USER_NAME="${IAM_USER_NAME:-genesis_s3}"
-export IAM_USER_PASS="${IAM_USER_PASS:-genesis_s3}"
+export IAM_USER_NAME="${IAM_USER_NAME:-exordos_s3}"
+export IAM_USER_PASS="${IAM_USER_PASS:-exordos_s3}"
 export PROJECT_ID="${PROJECT_ID}"
 export GC_HS256_JWKS_ENCRYPTION_KEY="${GC_HS256_JWKS_ENCRYPTION_KEY:-}"
 
-export GC_PG_USER="${GC_PG_USER:-genesis_s3}"
-export GC_PG_PASS="${GC_PG_PASS:-genesis_s3}"
-export GC_PG_DB="${GC_PG_DB:-genesis_s3}"
+export GC_PG_USER="${GC_PG_USER:-exordos_s3}"
+export GC_PG_PASS="${GC_PG_PASS:-exordos_s3}"
+export GC_PG_DB="${GC_PG_DB:-exordos_s3}"
 export GC_PG_ENDPOINTS="${GC_PG_ENDPOINTS:-}"
 
 # Wait for GC_PG_ENDPOINTS to be available
 while [ -z "$GC_PG_ENDPOINTS" ]; do
-    echo "GC_PG_ENDPOINTS is empty, re-reading genesis_init.txt..."
+    echo "GC_PG_ENDPOINTS is empty, re-reading exordos_init.txt..."
     sleep 5
-    source /etc/genesis_init.txt
+    source /etc/exordos_init.txt
     export GC_PG_ENDPOINTS="${GC_PG_ENDPOINTS:-}"
 done
 
@@ -55,7 +55,7 @@ if [[ ! -f $CORE_AGENT_CONFIG ]]; then
     try_generate_config "$CORE_AGENT_CONFIG"
 fi
 
-sudo mkdir -p /var/lib/genesis/genesis_s3/core_agent
+sudo mkdir -p /var/lib/exordos/exordos_s3/core_agent
 
 # Wait for database to be available
 wait_for_db() {
@@ -79,16 +79,16 @@ wait_for_db() {
 wait_for_db
 
 source "$GC_PATH"/.venv/bin/activate
-ra-apply-migration --config-dir "/etc/genesis_s3/" --path "$GC_PATH/.venv/lib/python3.12/site-packages/gcl_sdk/migrations"
-ra-apply-migration --config-dir "/etc/genesis_s3/" --path "$GC_PATH/migrations"
+ra-apply-migration --config-dir "/etc/exordos_s3/" --path "$GC_PATH/.venv/lib/python3.12/site-packages/gcl_sdk/migrations"
+ra-apply-migration --config-dir "/etc/exordos_s3/" --path "$GC_PATH/migrations"
 deactivate
 
-# Enable genesis s3 services
+# Enable exordos s3 services
 sudo systemctl enable --now \
-    genesis-s3-gservice \
-    genesis-s3-user-api \
-    genesis-s3-status-api \
-    genesis-s3-orch-api \
-    genesis-s3-core-agent
+    exordos-s3-gservice \
+    exordos-s3-user-api \
+    exordos-s3-status-api \
+    exordos-s3-orch-api \
+    exordos-s3-core-agent
 
 echo "Bootstrap completed successfully."

@@ -1,7 +1,7 @@
-site_name: genesis_s3
+site_name: exordos_s3
 site_url: https://github.com/infraguys/
-repo_name: genesis_s3
-repo_url: https://github.com/infraguys/genesis_s3
+repo_name: exordos_s3
+repo_url: https://github.com/infraguys/exordos_s3
 edit_uri: browse/docs/
 
 theme:

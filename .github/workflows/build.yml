@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 30
-      - name: Build Genesis S3
+      - name: Build Exordos S3
         env:
             PUSH_CFG: ${{ secrets.PUSH_CFG }}
         run: |

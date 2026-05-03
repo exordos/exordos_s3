@@ -1,7 +1,7 @@
-# Genesis S3aaS
+# Exordos S3aaS
 
 ## Overview
-Genesis S3 is an S3-compatible Object Storage as a Service platform. It provides managed, scalable object storage instances powered by RustFS with full S3 API compatibility.
+Exordos S3 is an S3-compatible Object Storage as a Service platform. It provides managed, scalable object storage instances powered by RustFS with full S3 API compatibility.
 
 ## Key Features
 - S3-compatible API (works with any S3 client/SDK)
