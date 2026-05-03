@@ -1,0 +1,13 @@
+[Unit]
+Description=Exordos S3 General Service
+After=network-online.target
+
+[Service]
+TimeoutStopSec=5
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+ExecStart=exordos-s3-gservice --config-file /etc/exordos_s3/exordos_s3.conf
+
+[Install]
+WantedBy=multi-user.target

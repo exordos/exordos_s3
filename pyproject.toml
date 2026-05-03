@@ -1,6 +1,6 @@
 [project]
-name = "genesis_s3"
-description = "S3aaS for Genesis Core"
+name = "exordos_s3"
+description = "S3aaS for Exordos Core"
 readme = "README.md"
 authors = [{name = "Genesis Corporation", email = "mail@gmelikov.ru"}]
 dynamic = ["version"]
@@ -30,7 +30,7 @@ dependencies = [
     "requests>=2.28.0,<3.0.0",  # Apache-2.0
 ]
 [project.urls]
-homepage = "https://github.com/infraguys/genesis_s3/"
+homepage = "https://github.com/infraguys/exordos_s3/"
 
 [build-system]
 requires = [
@@ -129,14 +129,14 @@ line-ending = "auto"
 where = ["."]
 
 [project.scripts]
-genesis-s3-user-api = "genesis_s3.cmd.user_api:main"
-genesis-s3-gservice = "genesis_s3.cmd.gservice:main"
-genesis-s3-orch-api = "genesis_s3.cmd.orch_api:main"
-genesis-s3-status-api = "genesis_s3.cmd.status_api:main"
-genesis-s3-bootstrap = "genesis_s3.cmd.bootstrap:main"
+exordos-s3-user-api = "exordos_s3.cmd.user_api:main"
+exordos-s3-gservice = "exordos_s3.cmd.gservice:main"
+exordos-s3-orch-api = "exordos_s3.cmd.orch_api:main"
+exordos-s3-status-api = "exordos_s3.cmd.status_api:main"
+exordos-s3-bootstrap = "exordos_s3.cmd.bootstrap:main"
 
 [project.entry-points."gcl_sdk_universal_agent"]
-S3CapabilityDriver = "genesis_s3.agent.universal.drivers.s3:S3CapabilityDriver"
+S3CapabilityDriver = "exordos_s3.agent.universal.drivers.s3:S3CapabilityDriver"
 
 [tool.uv]
 package = true
@@ -144,7 +144,7 @@ package = true
 [tool.mypy]
 exclude = [
     '.venv',
-    'genesis_s3/tests',
+    'exordos_s3/tests',
 ]
 python_version = "3.12"
 disallow_untyped_defs = true
@@ -155,16 +155,16 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 
 [tool.setuptools.package-data]
-genesis_s3 = ["*.yaml", "*.md"]
+exordos_s3 = ["*.yaml", "*.md"]
 
 [tool.coverage.run]
 branch = true
 source = [
-    "genesis_s3"
+    "exordos_s3"
 ]
-command_line = "-m pytest -s genesis_s3/tests/unit"
+command_line = "-m pytest -s exordos_s3/tests/unit"
 omit = [
-    "genesis_s3/tests/*",
+    "exordos_s3/tests/*",
     ".venv",
     "memory:0x"
 ]

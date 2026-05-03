@@ -1,0 +1,14 @@
+[Unit]
+Description=Exordos S3 User API
+After=network-online.target
+
+[Service]
+TimeoutStopSec=5
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+ExecStartPre=/bin/sleep 2
+ExecStart=exordos-s3-user-api --config-file /etc/exordos_s3/exordos_s3.conf
+
+[Install]
+WantedBy=multi-user.target

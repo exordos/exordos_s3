@@ -37,9 +37,9 @@ jobs:
       postgresql:
         image: postgres:latest
         env:
-          POSTGRES_DB: genesis_s3
+          POSTGRES_DB: exordos_s3
           POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_USER: genesis_s3
+          POSTGRES_USER: exordos_s3
           POSTGRES_PASSWORD: pass
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
         ports:

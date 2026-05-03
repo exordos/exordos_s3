@@ -1,5 +1,5 @@
 name: "s3aas"
-description: "Genesis S3aaS element"
+description: "Exordos S3aaS element"
 schema_version: 1
 version: "{{ version }}"
 api_version: "v1"
@@ -30,47 +30,47 @@ resources:
 
   $core.iam.permissions:
     s3_instance_create:
-      name: "genesis_s3.s3_instance.create"
+      name: "exordos_s3.s3_instance.create"
     s3_instance_read:
-      name: "genesis_s3.s3_instance.read"
+      name: "exordos_s3.s3_instance.read"
     s3_instance_update:
-      name: "genesis_s3.s3_instance.update"
+      name: "exordos_s3.s3_instance.update"
     s3_instance_delete:
-      name: "genesis_s3.s3_instance.delete"
+      name: "exordos_s3.s3_instance.delete"
     bucket_create:
-      name: "genesis_s3.bucket.create"
+      name: "exordos_s3.bucket.create"
     bucket_read:
-      name: "genesis_s3.bucket.read"
+      name: "exordos_s3.bucket.read"
     bucket_update:
-      name: "genesis_s3.bucket.update"
+      name: "exordos_s3.bucket.update"
     bucket_delete:
-      name: "genesis_s3.bucket.delete"
+      name: "exordos_s3.bucket.delete"
     policy_create:
-      name: "genesis_s3.policy.create"
+      name: "exordos_s3.policy.create"
     policy_read:
-      name: "genesis_s3.policy.read"
+      name: "exordos_s3.policy.read"
     policy_update:
-      name: "genesis_s3.policy.update"
+      name: "exordos_s3.policy.update"
     policy_delete:
-      name: "genesis_s3.policy.delete"
+      name: "exordos_s3.policy.delete"
     user_create:
-      name: "genesis_s3.user.create"
+      name: "exordos_s3.user.create"
     user_read:
-      name: "genesis_s3.user.read"
+      name: "exordos_s3.user.read"
     user_update:
-      name: "genesis_s3.user.update"
+      name: "exordos_s3.user.update"
     user_delete:
-      name: "genesis_s3.user.delete"
+      name: "exordos_s3.user.delete"
     access_key_create:
-      name: "genesis_s3.access_key.create"
+      name: "exordos_s3.access_key.create"
     access_key_read:
-      name: "genesis_s3.access_key.read"
+      name: "exordos_s3.access_key.read"
     access_key_update:
-      name: "genesis_s3.access_key.update"
+      name: "exordos_s3.access_key.update"
     access_key_delete:
-      name: "genesis_s3.access_key.delete"
+      name: "exordos_s3.access_key.delete"
     s3_version_read:
-      name: "genesis_s3.s3_version.read"
+      name: "exordos_s3.s3_version.read"
 
   $core.iam.permissionbinding:
     s3_instance_create_binding:
@@ -227,14 +227,14 @@ resources:
         kind: "disks"
         disks:
           - size: 6
-            image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3.raw.gz"
+            image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/exordos-s3.raw.gz"
             label: root
 
   # Config
   $core.config.configs:
     s3aas_cp_config:
       project_id: "12345678-c625-4fee-81d5-f691897b8142"
-      path: /etc/genesis_init.txt
+      path: /etc/exordos_init.txt
       target:
         kind: node
         node: $core.compute.nodes.$s3aas_cp:uuid
@@ -256,7 +256,7 @@ resources:
   $s3aas.types.s3.versions:
     rustfs_1:
       name: "rustfs_1"
-      image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/genesis-s3-dp.raw.gz"
+      image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/exordos-s3-dp.raw.gz"
 
   $s3aas.imports.$core_local_domain.records:
     s3aas_cp:

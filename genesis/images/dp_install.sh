@@ -21,10 +21,10 @@ set -x
 set -o pipefail
 
 
-GC_PATH="/opt/genesis_s3"
-GC_CFG_DIR=/etc/genesis_s3
-RUSTFS_CFG_DIR=/etc/genesis/rustfs
-WORK_DIR="/var/lib/genesis/genesis_s3"
+GC_PATH="/opt/exordos_s3"
+GC_CFG_DIR=/etc/exordos_s3
+RUSTFS_CFG_DIR=/etc/exordos_s3
+WORK_DIR="/var/lib/exordos/exordos_s3"
 RUSTFS_DATA_DIR="/var/lib/rustfs/data"
 VENV_PATH="$GC_PATH/.venv"
 BOOTSTRAP_PATH="/var/lib/genesis/bootstrap/scripts"
@@ -69,9 +69,9 @@ sudo mkdir -p $RUSTFS_CFG_DIR
 sudo mkdir -p $WORK_DIR
 sudo mkdir -p $RUSTFS_DATA_DIR
 
-# Install genesis s3 agent config and bootstrap
-sudo cp "$GC_PATH/etc/genesis_s3/genesis_s3_agent.conf" $GC_CFG_DIR/
-sudo cp "$GC_PATH/etc/genesis_s3/logging.yaml" $GC_CFG_DIR/
+# Install exordos s3 agent config and bootstrap
+sudo cp "$GC_PATH/etc/exordos_s3/exordos_s3_agent.conf" $GC_CFG_DIR/
+sudo cp "$GC_PATH/etc/exordos_s3/logging.yaml" $GC_CFG_DIR/
 sudo cp "$GC_PATH/genesis/images/dp_bootstrap.sh" $BOOTSTRAP_PATH/0100-gc-bootstrap.sh
 
 cd "$GC_PATH"
@@ -85,13 +85,13 @@ if [[ "$SDK_DEV_MODE" == "true" ]]; then
 fi
 
 # Create links to venv
-sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent" "/usr/bin/genesis-s3-agent"
+sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent" "/usr/bin/exordos-s3-agent"
 
 deactivate
 
 # Install Systemd service files
-sudo cp "$GC_PATH/etc/systemd/genesis-s3-agent.service" $SYSTEMD_SERVICE_DIR
-sudo cp "$GC_PATH/etc/systemd/genesis-rustfs.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-s3-agent.service" $SYSTEMD_SERVICE_DIR
+sudo cp "$GC_PATH/etc/systemd/exordos-rustfs.service" $SYSTEMD_SERVICE_DIR
 
-# Enable genesis s3 agent service
-sudo systemctl enable genesis-s3-agent
+# Enable exordos s3 agent service
+sudo systemctl enable exordos-s3-agent
