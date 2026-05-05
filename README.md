@@ -7,7 +7,7 @@ Exordos S3 is an S3-compatible Object Storage as a Service platform. It provides
 - S3-compatible API (works with any S3 client/SDK)
 - Managed RustFS instances with configurable resources
 - Bucket management with versioning, quotas, object lock and public access
-- IAM-compatible policies (builtin + custom JSON)
+- IAM-compatible policies (custom JSON)
 - Access key management with rotation support
 
 ## Architecture
