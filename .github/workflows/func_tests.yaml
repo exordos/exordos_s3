@@ -49,18 +49,18 @@ jobs:
       - name: Install genesis cli
         run: |
           curl -fsSL https://repository.genesis-core.tech/install.sh | sudo sh
-      - name: Build genesis core
+      - name: Build exordos core
         run: |
           cd ../
-          git clone -b "$CORE_BRANCH" https://github.com/infraguys/genesis_core.git
-          cd ./genesis_core
+          git clone -b "$CORE_BRANCH" https://github.com/exordos/exordos_core.git
+          cd ./exordos_core
           export ALLOW_USER_PASSWD=true
           export FREQUENT_LOG_VACUUM=true
           genesis build -f . --inventory --manifest-var repository=https://repository.genesis-core.tech
           cd $GITHUB_WORKSPACE
-      - name: Bootstrap genesis_core
+      - name: Bootstrap exordos_core
         run: |
-          cd ../genesis_core
+          cd ../exordos_core
           genesis bootstrap -i ./output/inventory.json -f -m core --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
           export ADMIN_PASSWORD=$(cat ./admin_password.txt)
           echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
