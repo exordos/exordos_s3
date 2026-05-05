@@ -17,11 +17,13 @@ The S3 service provides a REST-based API for creating and managing S3-compatible
 The main instance entity that manages:
 
 - Status (NEW, IN_PROGRESS, ACTIVE, ERROR)
+- `ipsv4`: List of data plane node IPv4 addresses (read-only, populated after provisioning)
 - Configuration parameters:
     - CPU cores (1-128)
     - RAM (512MB-1TB)
     - Disk size (8GB-1TB)
     - Node count (1-16, currently single_node only)
+- `kind`: Instance type (read-only after creation, currently `single_node` only)
 - Version information (RustFS image)
 - Root secret (auto-generated, hidden in API)
 - Associated buckets, policies, users, and access keys
@@ -30,18 +32,17 @@ The main instance entity that manages:
 
 Object storage buckets within the S3 instance:
 
-- Name validation (3-63 characters, DNS-compliant)
+- Name validation (3-63 characters, DNS-compliant, read-only after creation)
 - Versioning (enabled/disabled, read-only after creation)
-- Object lock with retention mode (GOVERNANCE/COMPLIANCE) and retention days
+- Object lock with `default_retention_mode` (GOVERNANCE/COMPLIANCE) and `default_retention_days` (1-365000)
 - Public read access toggle
-- Quota (reserved for future use)
+- `quota_bytes`: Quota in bytes (reserved for future use, default 0)
 
 ### Policy
 
 IAM-style access policies:
 
 - JSON policy document (AWS S3 policy format)
-- Builtin policies cannot be deleted
 - Policies are attached to users via User-Policy Attachment
 
 ### User
@@ -51,6 +52,7 @@ Logical user grouping — a container for access keys and policies:
 - Users are **not** created on the data plane directly
 - They group access keys and define which policies apply to them
 - All access keys under a user inherit its policies
+- `name` is read-only after creation
 
 ### Access Key
 
@@ -95,6 +97,8 @@ Infrastructure layer that manages the underlying compute resources:
   "description": "Application data bucket",
   "versioning_enabled": true,
   "object_lock_enabled": false,
+  "default_retention_mode": "GOVERNANCE",
+  "default_retention_days": 30,
   "public": false
 }
 ```
@@ -141,6 +145,8 @@ Infrastructure layer that manages the underlying compute resources:
 ```json
 {
   "uuid": "key-uuid",
+  "name": "app-key",
+  "description": "Application access key",
   "access_key": "ABCDEFGHIJKLMNOPQRST",
   "secret_key": "abcdefghijklmnopqrstuvwxyz1234567890ABCD",
   "status": "ACTIVE",
@@ -152,7 +158,6 @@ Infrastructure layer that manages the underlying compute resources:
 
 ```json
 {
-  "user": "/v1/types/s3/instances/INSTANCE_UUID/users/USER_UUID",
   "policy": "/v1/types/s3/instances/INSTANCE_UUID/policies/POLICY_UUID"
 }
 ```
@@ -178,7 +183,6 @@ Infrastructure layer that manages the underlying compute resources:
 ### Policy Validation
 
 - `content` must be a valid JSON policy document
-- Builtin policies cannot be deleted
 
 ## Status Management
 
@@ -241,6 +245,7 @@ The agent on each RustFS node reconciles target state (from CP) with actual stat
 - `POST /v1/types/s3/instances/{uuid}/users` - Create user
 - `GET /v1/types/s3/instances/{uuid}/users` - List users
 - `GET /v1/types/s3/instances/{uuid}/users/{uuid}` - Get user
+- `PUT /v1/types/s3/instances/{uuid}/users/{uuid}` - Update user (description only)
 - `DELETE /v1/types/s3/instances/{uuid}/users/{uuid}` - Delete user
 
 ### Access Key Management
@@ -248,6 +253,7 @@ The agent on each RustFS node reconciles target state (from CP) with actual stat
 - `POST /v1/types/s3/instances/{uuid}/users/{uuid}/keys` - Create access key
 - `GET /v1/types/s3/instances/{uuid}/users/{uuid}/keys` - List access keys
 - `GET /v1/types/s3/instances/{uuid}/users/{uuid}/keys/{uuid}` - Get access key
+- `PUT /v1/types/s3/instances/{uuid}/users/{uuid}/keys/{uuid}` - Update access key (name, description)
 - `DELETE /v1/types/s3/instances/{uuid}/users/{uuid}/keys/{uuid}` - Delete access key
 
 ### User-Policy Attachment

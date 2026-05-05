@@ -29,10 +29,11 @@ from gcl_sdk.agents.universal.dm import models as ua_models
 from exordos_s3.common import utils as u
 
 
+# Lengths and alphabets for S3 credential generation
 ACCESS_KEY_LENGTH = 20
 SECRET_KEY_LENGTH = 40
 ROOT_SECRET_LENGTH = 64
-ACCESS_KEY_ALPHABET = string.ascii_uppercase + string.digits
+ACCESS_KEY_ALPHABET = string.ascii_letters + string.digits
 SECRET_KEY_ALPHABET = string.ascii_letters + string.digits
 ROOT_SECRET_ALPHABET = string.ascii_letters + string.digits + "!@#$%^&*"
 
@@ -95,7 +96,7 @@ class S3Instance(
     root_secret = properties.property(
         types.String(min_length=1, max_length=256),
         default=lambda: "".join(
-            secrets.choice(string.ascii_letters + string.digits + "!@#$%^&*")
+            secrets.choice(ROOT_SECRET_ALPHABET)
             for _ in range(ROOT_SECRET_LENGTH)
         ),
     )
@@ -276,11 +277,11 @@ class S3AccessKey(
 
     user = relationships.relationship(S3User, required=True, read_only=True)
     access_key = properties.property(
-        types.String(min_length=1, max_length=128),
+        types.String(min_length=10, max_length=128),
         default=_generate_access_key,
     )
     secret_key = properties.property(
-        types.String(min_length=1, max_length=256),
+        types.String(min_length=10, max_length=256),
         default=_generate_secret_key,
     )
     status = properties.property(
