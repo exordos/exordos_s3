@@ -39,7 +39,7 @@ build:
       images:
       - name: exordos-s3
         format: GEN_IMG_FORMAT_CORE=gz
-        profile: genesis_base
+        profile: exordos_base
         script: images/cp_install.sh
 
         # Override image build parameters, for instance disk size
@@ -47,10 +47,12 @@ build:
           disk_size: "6G"
       - name: exordos-s3-dp
         format: GEN_IMG_FORMAT_CORE=gz
-        profile: genesis_base
+        profile: exordos_base
         script: images/dp_install.sh
 
         # Override image build parameters, for instance disk size
         override:
           disk_size: "6G"
           use_backing_file: true
+    - manifest: manifests/communal_s3.yaml.j2
+    - manifest: manifests/s3_example.yaml.j2

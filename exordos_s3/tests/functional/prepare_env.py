@@ -18,7 +18,7 @@
 
 Steps:
 1. Generate an SSH key pair (inject into VM images).
-2. Build element images via ``genesis build``.
+2. Build element images via ``exordos build``.
 3. Serve images via a local HTTP server.
 4. Install the element manifest into the running Exordos Core.
 
@@ -28,14 +28,14 @@ Usage examples::
 
     # Prepare S3aaS test environment
     python prepare_env.py \\
-        --project-dir ./genesis \\
+        --project-dir ./exordos \\
         --output-dir /tmp/s3aas-build \\
         --manifest-path /tmp/s3aas-build/manifests/s3aas.yaml \\
         --manifest-var repository=http://10.20.0.1:8000
 
     # Prepare DBaaS test environment
     python prepare_env.py \\
-        --project-dir ../genesis_db/genesis \\
+        --project-dir ../exordos_db/exordos \\
         --output-dir /tmp/dbaas-build \\
         --manifest-path /tmp/dbaas-build/manifests/dbaas.yaml \\
         --manifest-var repository=http://10.20.0.1:8000
@@ -109,7 +109,7 @@ def _generate_ssh_key(key_dir: str) -> tuple[str, str]:
             "-N",
             "",
             "-C",
-            "genesis-test-env",
+            "exordos-test-env",
         ]
     )
     _log(f"Generated SSH key pair in {key_dir}")
@@ -123,9 +123,9 @@ def _build_element(
     force: bool = False,
     manifest_vars: dict[str, str] | None = None,
 ) -> None:
-    """Run ``genesis build`` to produce images and rendered manifests."""
+    """Run ``exordos build`` to produce images and rendered manifests."""
     cmd = [
-        "genesis",
+        "exordos",
         "build",
         "-i",
         public_key_path,
@@ -196,7 +196,7 @@ def _create_image_symlinks(output_dir: pathlib.Path) -> None:
 
     The manifest references images as:
         {repository}/{element_name}/{version}/images/{image_file}
-    But genesis build puts them at:
+    But exordos build puts them at:
         {output_dir}/images/{image_file}
 
     This function reads inventory.json and creates:
@@ -214,23 +214,47 @@ def _create_image_symlinks(output_dir: pathlib.Path) -> None:
     if not isinstance(inventories, list):
         inventories = [inventories]
 
-    for inv in inventories:
-        name = inv["name"]
-        version = inv["version"]
+    # Use only the first inventory entry — it's the primary element
+    inv = inventories[0]
+    name = inv["name"]
+    version = inv["version"]
 
-        # Target: {output_dir}/{name}/{version}/images/
-        target_dir = output_dir / name / version / "images"
-        target_dir.mkdir(parents=True, exist_ok=True)
+    # Target: {output_dir}/{name}/{version}/images/
+    target_dir = output_dir / name / version / "images"
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-        for img_path in inv.get("images", []):
-            img_name = pathlib.Path(img_path).name
-            link = target_dir / img_name
-            src = pathlib.Path("../../../images") / img_name
-            if not link.exists():
-                link.symlink_to(src)
-                _log(f"  Symlink: {link} -> {src}")
+    for img_path in inv.get("images", []):
+        img_name = pathlib.Path(img_path).name
+        link = target_dir / img_name
+        src = pathlib.Path("../../../images") / img_name
+        if not link.exists():
+            link.symlink_to(src)
+            _log(f"  Symlink: {link} -> {src}")
 
     _log("Image symlinks created")
+
+
+def _get_primary_manifest(output_dir: pathlib.Path) -> str:
+    """Return the manifest path for the primary element from inventory.json."""
+    inventory_path = output_dir / "inventory.json"
+    if not inventory_path.exists():
+        raise FileNotFoundError(
+            f"No inventory.json found at {inventory_path}"
+        )
+
+    with open(inventory_path) as f:
+        inventories = json.load(f)
+
+    if not isinstance(inventories, list):
+        inventories = [inventories]
+
+    primary = inventories[0]
+    manifests = primary.get("manifests", [])
+    if not manifests:
+        raise FileNotFoundError(
+            f"No manifests listed for element '{primary['name']}' in inventory.json"
+        )
+    return manifests[0]
 
 
 def _install_element(
@@ -244,7 +268,7 @@ def _install_element(
 ) -> None:
     """Install or update the element manifest in Exordos Core via CLI."""
     base_cmd = [
-        "genesis",
+        "exordos",
         "-e",
         endpoint,
         "-u",
@@ -303,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--project-dir",
         required=True,
-        help="Path to the genesis project directory (contains genesis.yaml)",
+        help="Path to the exordos project directory (contains exordos.yaml)",
     )
     p.add_argument(
         "--output-dir",
@@ -313,13 +337,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--key-dir",
         default=None,
-        help="Directory for SSH key pair (default: /tmp/genesis-test-keys)",
+        help="Directory for SSH key pair (default: /tmp/exordos-test-keys)",
     )
     p.add_argument(
         "-i",
         "--developer-key-path",
         default=None,
-        help="Path to developer public key (forwarded to genesis build -i)",
+        help="Path to developer public key (forwarded to exordos build -i)",
     )
     p.add_argument(
         "--force-build",
@@ -329,10 +353,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--skip-build",
         action="store_true",
-        help="Skip genesis build (images already built)",
+        help="Skip exordos build (images already built)",
     )
 
-    # Manifest vars (forwarded to genesis build --manifest-var)
+    # Manifest vars (forwarded to exordos build --manifest-var)
     p.add_argument(
         "--manifest-var",
         action="append",
@@ -365,7 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Path to the rendered manifest YAML to install. "
-            "Default: <output-dir>/manifests/<first>.yaml"
+            "Default: first manifest from inventory.json"
         ),
     )
     p.add_argument(
@@ -404,7 +428,7 @@ def build_parser() -> argparse.ArgumentParser:
             "NO_PROXY",
             "10.20.0.0/22,localhost,127.0.0.1,repository.genesis-core.tech",
         ),
-        help="NO_PROXY value for genesis CLI calls",
+        help="NO_PROXY value for exordos CLI calls",
     )
 
     # Cleanup
@@ -427,12 +451,12 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     output_dir = pathlib.Path(args.output_dir)
-    # Key dir must be OUTSIDE output_dir because genesis build --force
+    # Key dir must be OUTSIDE output_dir because exordos build --force
     # does shutil.rmtree(output_dir), destroying everything inside.
     key_dir = (
         pathlib.Path(args.key_dir)
         if args.key_dir
-        else pathlib.Path(tempfile.gettempdir()) / "genesis-test-keys"
+        else pathlib.Path(tempfile.gettempdir()) / "exordos-test-keys"
     )
 
     # -- Cleanup mode: just stop the HTTP server
@@ -440,7 +464,7 @@ def main(argv: list[str] | None = None) -> None:
         pid_file = (
             pathlib.Path(args.pid_file)
             if args.pid_file
-            else pathlib.Path(tempfile.gettempdir()) / "genesis-http-server.pid"
+            else pathlib.Path(tempfile.gettempdir()) / "exordos-http-server.pid"
         )
         if pid_file.exists():
             pid = int(pid_file.read_text().strip())
@@ -512,7 +536,7 @@ def main(argv: list[str] | None = None) -> None:
 
         # The manifest references images as:
         #   {repository}/s3aas/{version}/images/exordos-s3.raw.gz
-        # But genesis build puts them at:
+        # But exordos build puts them at:
         #   {output_dir}/images/exordos-s3.raw.gz
         # Create a symlink tree so the HTTP server can serve the
         # expected URL structure from the output directory root.
@@ -524,7 +548,7 @@ def main(argv: list[str] | None = None) -> None:
         pid_file = (
             pathlib.Path(args.pid_file)
             if args.pid_file
-            else pathlib.Path(tempfile.gettempdir()) / "genesis-http-server.pid"
+            else pathlib.Path(tempfile.gettempdir()) / "exordos-http-server.pid"
         )
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(http_proc.pid))
@@ -541,17 +565,7 @@ def main(argv: list[str] | None = None) -> None:
 
         manifest_path = args.manifest_path
         if not manifest_path:
-            # Auto-detect from output dir
-            manifests_dir = output_dir / "manifests"
-            if not manifests_dir.exists():
-                _log(f"ERROR: No manifests directory at {manifests_dir}")
-                _log("Use --manifest-path to specify the manifest file")
-                sys.exit(1)
-            yaml_files = sorted(manifests_dir.glob("*.yaml"))
-            if not yaml_files:
-                _log(f"ERROR: No YAML manifests found in {manifests_dir}")
-                sys.exit(1)
-            manifest_path = str(yaml_files[0])
+            manifest_path = _get_primary_manifest(output_dir)
             _log(f"Auto-detected manifest: {manifest_path}")
 
         _install_element(

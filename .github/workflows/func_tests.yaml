@@ -46,7 +46,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
       - name: Install tox-uv
         run: uv tool install tox --with tox-uv
-      - name: Install genesis cli
+      - name: Install exordos cli
         run: |
           curl -fsSL https://repository.genesis-core.tech/install.sh | sudo sh
       - name: Build exordos core
@@ -56,12 +56,12 @@ jobs:
           cd ./exordos_core
           export ALLOW_USER_PASSWD=true
           export FREQUENT_LOG_VACUUM=true
-          genesis build -f . --inventory --manifest-var repository=https://repository.genesis-core.tech
+          exordos build -f . --inventory --manifest-var repository=https://repository.genesis-core.tech
           cd $GITHUB_WORKSPACE
       - name: Bootstrap exordos_core
         run: |
           cd ../exordos_core
-          genesis bootstrap -i ./output/inventory.json -f -m core --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
+          exordos bootstrap -i ./output/inventory.json -f -m core --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
           export ADMIN_PASSWORD=$(cat ./admin_password.txt)
           echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
           sudo curl http://repository.genesis-core.tech:8081/1af41041/latest/1af41041.rom --output /usr/share/qemu/1af41041.rom
@@ -102,7 +102,7 @@ jobs:
                   "driver": "libvirt",
                   "iface_mtu": 1500,
                   "network_type": "network",
-                  "network": "genesis-core-net",
+                  "network": "exordos-core-net",
                   "storage_pool": "default",
                   "connection_uri": "qemu+tcp://10.20.0.1/system",
                   "machine_prefix": "dev-"
@@ -114,7 +114,7 @@ jobs:
       - name: Preload dependencies in background
         run: |
           for dep in $ELEMENT_DEPS; do
-            genesis -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD elements install $dep
+            exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD elements install $dep
           done
       - name: Build and start PaaS
         run: |
@@ -125,8 +125,8 @@ jobs:
       - name: Find S3aaS CP IP
         run: |
           sleep 6
-          genesis -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list
-          S3AAS_CP_IP=$(genesis -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list | grep s3aas-cp | awk -F'│' '{print $7}' | tr -d ' ')
+          exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list
+          S3AAS_CP_IP=$(exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list | grep s3aas-cp | awk -F'│' '{print $7}' | tr -d ' ')
           echo "S3AAS_CP_IP=$S3AAS_CP_IP" >> $GITHUB_ENV
           echo "Found S3aaS CP IP: $S3AAS_CP_IP"
       - name: Wait for S3aaS CP API

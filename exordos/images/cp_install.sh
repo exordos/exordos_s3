@@ -24,7 +24,7 @@ set -o pipefail
 GC_PATH="/opt/exordos_s3"
 GC_CFG_DIR=/etc/exordos_s3
 VENV_PATH="$GC_PATH/.venv"
-BOOTSTRAP_PATH="/var/lib/genesis/bootstrap/scripts"
+BOOTSTRAP_PATH="/var/lib/exordos/bootstrap/scripts"
 
 SYSTEMD_SERVICE_DIR=/etc/systemd/system/
 
@@ -37,14 +37,19 @@ sudo apt dist-upgrade -y
 sudo apt install -y \
     libev-dev \
     j2cli \
-    postgresql-client-16
+    postgresql-client-16 \
+    yq
+
+echo "ubuntu:ubuntu" | sudo chpasswd
+sudo rm /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+sudo yq -yi '.system_info.default_user.lock_passwd |= false' /etc/cloud/cloud.cfg
 
 # Install exordos s3
 sudo mkdir -p $GC_CFG_DIR
 sudo cp "$GC_PATH/etc/exordos_s3/exordos_s3.conf.j2" $GC_CFG_DIR/
 sudo cp "$GC_PATH/etc/exordos_s3/core_agent.conf.j2" $GC_CFG_DIR/
 sudo cp "$GC_PATH/etc/exordos_s3/logging.yaml" $GC_CFG_DIR/
-sudo cp "$GC_PATH/genesis/images/cp_bootstrap.sh" $BOOTSTRAP_PATH/0100-gc-bootstrap.sh
+sudo cp "$GC_PATH/exordos/images/cp_bootstrap.sh" $BOOTSTRAP_PATH/0100-s3-bootstrap.sh
 
 cd "$GC_PATH"
 uv sync
@@ -62,7 +67,7 @@ sudo ln -sf "$VENV_PATH/bin/exordos-s3-gservice" "/usr/bin/exordos-s3-gservice"
 sudo ln -sf "$VENV_PATH/bin/exordos-s3-user-api" "/usr/bin/exordos-s3-user-api"
 sudo ln -sf "$VENV_PATH/bin/exordos-s3-status-api" "/usr/bin/exordos-s3-status-api"
 sudo ln -sf "$VENV_PATH/bin/exordos-s3-orch-api" "/usr/bin/exordos-s3-orch-api"
-sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent-db-back" "/usr/bin/genesis-universal-agent-db-back"
+sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent-db-back" "/usr/bin/exordos-universal-agent-db-back"
 
 # Install Systemd service files
 sudo cp "$GC_PATH/etc/systemd/exordos-s3-gservice.service" $SYSTEMD_SERVICE_DIR

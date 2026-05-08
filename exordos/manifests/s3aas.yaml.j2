@@ -227,7 +227,7 @@ resources:
         kind: "disks"
         disks:
           - size: 6
-            image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/exordos-s3.raw.gz"
+            image: "{{ repository | default('https://repository.genesis-core.tech/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3.raw.gz"
             label: root
 
   # Config
@@ -256,7 +256,7 @@ resources:
   $s3aas.types.s3.versions:
     rustfs_1:
       name: "rustfs_1"
-      image: "{{ repository | default('https://repository.genesis-core.tech/genesis-elements') }}/s3aas/{{ version }}/images/exordos-s3-dp.raw.gz"
+      image: "{{ repository | default('https://repository.genesis-core.tech/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3-dp.raw.gz"
 
   $s3aas.imports.$core_local_domain.records:
     s3aas_cp:
