@@ -24,7 +24,7 @@ GC_PATH="/opt/exordos_s3"
 SERVICE_CONFIG="/etc/exordos_s3/exordos_s3.conf"
 CORE_AGENT_CONFIG="/etc/exordos_s3/core_agent.conf"
 
-source /usr/local/lib/genesis/lib_bootstrap.sh
+source /usr/local/lib/exordos/lib_bootstrap.sh
 
 while [ ! -f /etc/exordos_init.txt ]; do sleep 1; done
 source /etc/exordos_init.txt

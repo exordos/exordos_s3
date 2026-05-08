@@ -27,7 +27,7 @@ RUSTFS_CFG_DIR=/etc/exordos_s3
 WORK_DIR="/var/lib/exordos/exordos_s3"
 RUSTFS_DATA_DIR="/var/lib/rustfs/data"
 VENV_PATH="$GC_PATH/.venv"
-BOOTSTRAP_PATH="/var/lib/genesis/bootstrap/scripts"
+BOOTSTRAP_PATH="/var/lib/exordos/bootstrap/scripts"
 
 SYSTEMD_SERVICE_DIR=/etc/systemd/system/
 
@@ -72,7 +72,7 @@ sudo mkdir -p $RUSTFS_DATA_DIR
 # Install exordos s3 agent config and bootstrap
 sudo cp "$GC_PATH/etc/exordos_s3/exordos_s3_agent.conf" $GC_CFG_DIR/
 sudo cp "$GC_PATH/etc/exordos_s3/logging.yaml" $GC_CFG_DIR/
-sudo cp "$GC_PATH/genesis/images/dp_bootstrap.sh" $BOOTSTRAP_PATH/0100-gc-bootstrap.sh
+sudo cp "$GC_PATH/exordos/images/dp_bootstrap.sh" $BOOTSTRAP_PATH/0100-s3-bootstrap.sh
 
 cd "$GC_PATH"
 uv sync
