@@ -656,7 +656,7 @@ requires-dist = [
     { name = "exordos", marker = "extra == 'test'", specifier = ">=2.0.0,<3.0.0" },
     { name = "gcl-iam", specifier = ">=1.0.3,<2.0.0" },
     { name = "gcl-looper", specifier = ">=1.2.0,<=2.0.0" },
-    { name = "gcl-sdk", specifier = ">=2.0.4,<=3.0.0" },
+    { name = "gcl-sdk", specifier = ">=2.2.2,<=3.0.0" },
     { name = "minio", specifier = ">=7.2.0,<8.0.0" },
     { name = "mkdocs-glightbox", marker = "extra == 'docs'" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = "==9.7.6" },
@@ -718,7 +718,7 @@ wheels = [
 
 [[package]]
 name = "gcl-sdk"
-version = "2.2.0"
+version = "2.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bjoern" },
@@ -732,9 +732,9 @@ dependencies = [
     { name = "restalchemy" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/85/fa/0a17e90396c40d194cc0a4f65031376b6be8ba0d086312b390eacabba2ed/gcl_sdk-2.2.0.tar.gz", hash = "sha256:27ef647195c9c254d61d2ee5c0d4171afc6e4a0a9f9b70a26c16a7ad1dfa1d32", size = 273796, upload-time = "2026-04-17T16:48:00.446Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/64/449f36d1c37f36f3ae3fbc01da7d1cd13e1bf22f785392f6ec248f25aebf/gcl_sdk-2.2.2.tar.gz", hash = "sha256:3d2d14c0f86bf307d2029c3dc3c44f5e7d44e8dc6db019bf319eccebfb19d988", size = 277852, upload-time = "2026-05-08T15:16:10.735Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/73/94219a78f9bf0f6c6813dcc826d0b9614b133d14d5535e2c59f35698c571/gcl_sdk-2.2.0-py3-none-any.whl", hash = "sha256:e97b16aeba123fdeb309cd238298522e9e54643cc36cadd31d0bf51ae0d06f1e", size = 209560, upload-time = "2026-04-17T16:47:58.887Z" },
+    { url = "https://files.pythonhosted.org/packages/89/a2/267393a3470ddba887394e67401e3006da38856167bd51b08000e8f684e2/gcl_sdk-2.2.2-py3-none-any.whl", hash = "sha256:02a508d81456f69641b7c73269c3e69eb5a5e18308e75292535f544b5f8cddf2", size = 209809, upload-time = "2026-05-08T15:16:09.084Z" },
 ]
 
 [[package]]
