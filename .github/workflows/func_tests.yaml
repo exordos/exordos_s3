@@ -63,7 +63,7 @@ jobs:
           cd ../exordos_core
           exordos bootstrap -i ./output/inventory.json -f -m core --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
           export ADMIN_PASSWORD=$(cat ./admin_password.txt)
-          echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> $GITHUB_ENV
+          echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> $GITHUB_ENV
           sudo curl http://repository.genesis-core.tech:8081/1af41041/latest/1af41041.rom --output /usr/share/qemu/1af41041.rom
           cd -
       - name: Wait for Exordos Core API
@@ -86,7 +86,7 @@ jobs:
               --header 'Content-Type: application/x-www-form-urlencoded' \
               --data-urlencode 'grant_type=password' \
               --data-urlencode 'username=admin' \
-              --data-urlencode "password=$ADMIN_PASSWORD" \
+              --data-urlencode "password=${ADMIN_PASSWORD}" \
               --data-urlencode 'client_id=GenesisCoreClientId' \
               --data-urlencode 'client_secret=GenesisCoreSecret' \
               --data-urlencode 'scope=openid' \
@@ -114,19 +114,19 @@ jobs:
       - name: Preload dependencies in background
         run: |
           for dep in $ELEMENT_DEPS; do
-            exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD e elements install $dep
+            exordos -e http://10.20.0.2:11010 -u admin -p "${ADMIN_PASSWORD}" e elements install $dep
           done
       - name: Build and start PaaS
         run: |
           tox -e develop
           # TODO: to use .raw we need to patch manifest
           # export GEN_IMG_FORMAT_CORE=raw
-          .tox/develop/bin/python exordos_s3/tests/functional/prepare_env.py --project-dir . --output-dir /tmp/s3aas-build --endpoint http://10.20.0.2:11010 --username admin --password $ADMIN_PASSWORD
+          .tox/develop/bin/python exordos_s3/tests/functional/prepare_env.py --project-dir . --output-dir /tmp/s3aas-build --endpoint http://10.20.0.2:11010 --username admin --password "${ADMIN_PASSWORD}"
       - name: Find S3aaS CP IP
         run: |
           sleep 6
-          exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list
-          S3AAS_CP_IP=$(exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD compute nodes list | grep s3aas-cp | awk -F'│' '{print $7}' | tr -d ' ')
+          exordos -e http://10.20.0.2:11010 -u admin -p "${ADMIN_PASSWORD}" compute nodes list
+          S3AAS_CP_IP=$(exordos -e http://10.20.0.2:11010 -u admin -p "${ADMIN_PASSWORD}" compute nodes list | grep s3aas-cp | awk -F'│' '{print $7}' | tr -d ' ')
           echo "S3AAS_CP_IP=$S3AAS_CP_IP" >> $GITHUB_ENV
           echo "Found S3aaS CP IP: $S3AAS_CP_IP"
       - name: Wait for S3aaS CP API
