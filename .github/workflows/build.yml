@@ -82,37 +82,7 @@ jobs:
           exit 1
       - name: Set hypervisor with overbooking
         run: |
-          VM_IP=10.20.0.2
-          # Get token
-          ADMIN_TOKEN=$(curl --location "http://$VM_IP:11010/v1/iam/clients/00000000-0000-0000-0000-000000000000/actions/get_token/invoke" \
-              --header 'Content-Type: application/x-www-form-urlencoded' \
-              --data-urlencode 'grant_type=password' \
-              --data-urlencode 'username=admin' \
-              --data-urlencode "password=${CORE_PASSWORD}" \
-              --data-urlencode 'client_id=GenesisCoreClientId' \
-              --data-urlencode 'client_secret=GenesisCoreSecret' \
-              --data-urlencode 'scope=openid' \
-              --data-urlencode 'ttl=3600' | jq .access_token -r)
-          echo "ADMIN_TOKEN=$ADMIN_TOKEN" >> $GITHUB_ENV
-          curl --location --globoff "http://$VM_IP:11010/v1/compute/hypervisors/" \
-          --header 'Content-Type: application/json' \
-          --header "Authorization: Bearer $ADMIN_TOKEN" \
-          --data '{
-              "uuid": "63d6caf1-c452-4697-9d03-b4579612c1f5",
-              "name": "hypervisor",
-              "driver_spec": {
-                  "driver": "libvirt",
-                  "iface_mtu": 1500,
-                  "network_type": "network",
-                  "network": "exordos-core-net",
-                  "storage_pool": "default",
-                  "connection_uri": "qemu+tcp://10.20.0.1/system",
-                  "machine_prefix": "dev-"
-              },
-              "machine_type": "VM",
-              "cores_ratio": 10.0,
-              "ram_ratio": 10.0
-          }'
+          exordos compute hypervisors add -u 63d6caf1-c452-4697-9d03-b4579612c1f5 -m VM --cores_ratio 10.0 --ram_ratio 10.0 -d driver=libvirt -d iface_mtu=1500 -d network_type=network -d network=exordos-core-net -d storage_pool=default -d connection_uri=qemu+tcp://10.20.0.1/system -d machine_prefix=dev-
       - name: Preload dependencies in background
         run: |
           for dep in $ELEMENT_DEPS; do
@@ -128,12 +98,12 @@ jobs:
           VERSION=$(cat artifacts/version.txt)
           exordos e e install s3aas -v $VERSION
       - name: check exordos s3aas
-        timeout-minutes: 10
+        timeout-minutes: 5
         run: |
-          # set -eux
+          set -eux
           
           while [ $(exordos ee l -o json -f name=s3aas | jq -r .[0]."Status") != "ACTIVE" ]; do
-            sleep 2
+            sleep 5
           done
           exordos e e show s3aas
       # - name: Install requirements
