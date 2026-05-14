@@ -56,7 +56,7 @@ jobs:
           cd ./exordos_core
           export ALLOW_USER_PASSWD=true
           export FREQUENT_LOG_VACUUM=true
-          exordos build -f . --inventory --manifest-var repository=https://repository.genesis-core.tech
+          exordos build -f . --manifest-var repository=https://repository.genesis-core.tech
           cd $GITHUB_WORKSPACE
       - name: Bootstrap exordos_core
         run: |
@@ -114,7 +114,7 @@ jobs:
       - name: Preload dependencies in background
         run: |
           for dep in $ELEMENT_DEPS; do
-            exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD elements install $dep
+            exordos -e http://10.20.0.2:11010 -u admin -p $ADMIN_PASSWORD e elements install $dep
           done
       - name: Build and start PaaS
         run: |
