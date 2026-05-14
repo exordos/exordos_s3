@@ -153,7 +153,6 @@ jobs:
           EXORDOS_POLL_INTERVAL: 15
         run: |
           tox -e ${PYTHON_VERSION}-functional
-      - uses: actions/checkout@v2
       - name: Setup upterm session
         uses: owenthereal/action-upterm@v1
         if: ${{ failure() }}
