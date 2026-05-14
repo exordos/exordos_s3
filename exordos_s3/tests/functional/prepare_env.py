@@ -132,7 +132,6 @@ def _build_element(
         "-f",
         "--output-dir",
         output_dir,
-        "--inventory",
         project_dir,
     ]
     if force:
@@ -285,7 +284,7 @@ def _install_element(
         proxy_env["no_proxy"] = no_proxy
 
     # Try install first; if element already exists, use update instead.
-    install_cmd = base_cmd + ["elements", "install", manifest_path]
+    install_cmd = base_cmd + ["e", "elements", "install", manifest_path]
     if repository:
         install_cmd.extend(["-r", repository])
 
@@ -298,7 +297,7 @@ def _install_element(
     # Check if the failure is "already installed"
     if "already installed" in (result.stderr + result.stdout).lower():
         _log("Element already installed, switching to update")
-        update_cmd = base_cmd + ["elements", "update", manifest_path]
+        update_cmd = base_cmd + ["e", "elements", "update", manifest_path]
         if repository:
             update_cmd.extend(["-r", repository])
         _run(update_cmd, env=proxy_env or None)

@@ -26,11 +26,11 @@ jobs:
           source ~/.profile
           VERSION="$(exordos get-version .)"
 
-          exordos build $(pwd) --inventory
+          exordos build $(pwd)
 
           # Decode and write the push configuration
-          echo "$PUSH_CFG" | base64 -d > exordos /exordos .push.yaml
-          exordos push -c exordos /exordos .push.yaml -t local -f --latest
+          echo "$PUSH_CFG" | base64 -d > exordos/exordos.push.yaml
+          exordos push -c exordos/exordos.push.yaml -t local -f --latest
 
           # Temporary upload step is done in the build script
           echo "${VERSION}" > "${ARTIFACTS_PATH}/version.txt"

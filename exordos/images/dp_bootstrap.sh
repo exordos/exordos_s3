@@ -25,20 +25,7 @@ source /usr/local/lib/exordos/lib_bootstrap.sh
 # persistent data routines
 PERSISTENT_DISK=$(find_persistent_disk)
 
-# Partial copy of prepare_persistent_disk to use XFS instead of EXT4
-partition=$(get_partition_name "$PERSISTENT_DISK")
-
-# Check if partition already exists
-if has_gpt_partition "$PERSISTENT_DISK"; then
-    echo "GPT partition already exists on $PERSISTENT_DISK"
-else
-    # Disk is not partitioned, create GPT partition table and partition
-    create_gpt_partition "$PERSISTENT_DISK"
-    echo "Formatting persistent partition $partition with XFS..."
-    mkfs.xfs "$partition"
-fi
-
-prepare_persistent_disk "$PERSISTENT_DISK" "$PERSISTENT_MOUNT"
+prepare_persistent_disk "$PERSISTENT_DISK" "$PERSISTENT_MOUNT" "xfs"
 
 if [[ -n "$PERSISTENT_DISK" ]]; then
     # Migrate logs first, some processes may be left writing to root disk until next reboot
