@@ -37,7 +37,7 @@ sudo apt dist-upgrade -y
 sudo apt install -y \
     libev-dev \
     j2cli \
-    postgresql-client-16 \
+    postgresql-client-18 \
     yq
 
 echo "ubuntu:ubuntu" | sudo chpasswd
