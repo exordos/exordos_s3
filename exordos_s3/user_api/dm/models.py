@@ -18,16 +18,15 @@ import enum
 import secrets
 import string
 
+from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.dm import filters as dm_filters
 from restalchemy.dm import models
 from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
 from restalchemy.storage.sql import orm
-from gcl_sdk.agents.universal.dm import models as ua_models
 
 from exordos_s3.common import utils as u
-
 
 # Lengths and alphabets for S3 credential generation
 ACCESS_KEY_LENGTH = 20
@@ -96,8 +95,7 @@ class S3Instance(
     root_secret = properties.property(
         types.String(min_length=1, max_length=256),
         default=lambda: "".join(
-            secrets.choice(ROOT_SECRET_ALPHABET)
-            for _ in range(ROOT_SECRET_LENGTH)
+            secrets.choice(ROOT_SECRET_ALPHABET) for _ in range(ROOT_SECRET_LENGTH)
         ),
     )
     version = relationships.relationship(S3Version, required=True, read_only=True)
@@ -214,9 +212,7 @@ class S3Policy(InstanceChildModel):
     content = properties.property(types.Dict(), required=True)
 
     def delete(self, session=None, **kwargs):
-        u.remove_nested_dm(
-            S3UserPolicyAttachment, "policy", self, session=session
-        )
+        u.remove_nested_dm(S3UserPolicyAttachment, "policy", self, session=session)
         return super().delete(session=session, **kwargs)
 
 
