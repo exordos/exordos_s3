@@ -126,7 +126,11 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint.isort]
+<<<<<<< HEAD
 known-first-party = ["exordos_db"]
+=======
+known-first-party = ["exordos_s3"]
+>>>>>>> 58033b1 (update ci)
 combine-as-imports = false
 force-sort-within-sections = true
 order-by-type = true

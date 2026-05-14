@@ -1,7 +1,7 @@
 site_name: exordos_s3
-site_url: https://github.com/infraguys/
+site_url: https://github.com/exordos/
 repo_name: exordos_s3
-repo_url: https://github.com/infraguys/exordos_s3
+repo_url: https://github.com/exordos/exordos_s3
 edit_uri: browse/docs/
 
 theme:
