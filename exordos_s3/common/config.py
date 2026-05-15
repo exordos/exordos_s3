@@ -18,8 +18,8 @@ import logging
 
 from oslo_config import cfg
 
-from exordos_s3.common import constants
 from exordos_s3 import version
+from exordos_s3.common import constants
 
 GLOBAL_SERVICE_NAME = constants.GLOBAL_SERVICE_NAME
 

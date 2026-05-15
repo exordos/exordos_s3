@@ -54,8 +54,6 @@ import sys
 import tempfile
 import time
 
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -237,9 +235,7 @@ def _get_primary_manifest(output_dir: pathlib.Path) -> str:
     """Return the manifest path for the primary element from inventory.json."""
     inventory_path = output_dir / "inventory.json"
     if not inventory_path.exists():
-        raise FileNotFoundError(
-            f"No inventory.json found at {inventory_path}"
-        )
+        raise FileNotFoundError(f"No inventory.json found at {inventory_path}")
 
     with open(inventory_path) as f:
         inventories = json.load(f)

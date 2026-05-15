@@ -428,9 +428,7 @@ class AdminClient(singletons.InheritSingleton):
             )
             LOG.info("Bucket %s quota set to %d bytes", bucket_name, quota_bytes)
         except Exception:
-            LOG.error(
-                "Failed to set quota for bucket %s", bucket_name, exc_info=True
-            )
+            LOG.error("Failed to set quota for bucket %s", bucket_name, exc_info=True)
             raise
 
     def get_bucket_quota(self, bucket_name):
@@ -444,7 +442,8 @@ class AdminClient(singletons.InheritSingleton):
         except Exception:
             LOG.debug(
                 "Failed to get quota for bucket %s, assuming no quota",
-                bucket_name, exc_info=True,
+                bucket_name,
+                exc_info=True,
             )
             return 0
 
