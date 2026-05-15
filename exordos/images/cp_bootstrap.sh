@@ -79,7 +79,7 @@ wait_for_db() {
 wait_for_db
 
 source "$GC_PATH"/.venv/bin/activate
-ra-apply-migration --config-dir "/etc/exordos_s3/" --path "$GC_PATH/.venv/lib/python3.12/site-packages/gcl_sdk/migrations"
+ra-apply-migration --config-dir "/etc/exordos_s3/" --path "$($GC_PATH/.venv/bin/python3 -c 'import gcl_sdk; print(gcl_sdk.__path__[0] + "/migrations")')"
 ra-apply-migration --config-dir "/etc/exordos_s3/" --path "$GC_PATH/migrations"
 deactivate
 
