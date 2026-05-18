@@ -33,7 +33,7 @@ jobs:
 
           # Temporary upload step is done in the build script
           echo "${VERSION}" > "${ARTIFACTS_PATH}/version.txt"
-          mv output/images/*.raw.gz "${ARTIFACTS_PATH}/"
+          mv output/images/*.raw.zst "${ARTIFACTS_PATH}/"
       - name: Set current date as env variable
         id: date
         run: |
@@ -44,7 +44,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./artifacts/*.gz
+          file: ./artifacts/*.zst
           tag: ${{ github.ref }}
           release_name: ${{ steps.date.outputs.DATE }} (${{ github.ref_name }})
           overwrite: true
