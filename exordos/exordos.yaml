@@ -55,4 +55,4 @@ build:
           disk_size: "6G"
           use_backing_file: true
     - manifest: manifests/communal_s3.yaml.j2
-    - manifest: manifests/s3_example.yaml.j2
+    - manifest: manifests/example_s3.yaml.j2
