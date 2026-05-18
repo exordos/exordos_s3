@@ -534,9 +534,9 @@ def main(argv: list[str] | None = None) -> None:
         _log("Step 3: Starting HTTP server for image distribution")
 
         # The manifest references images as:
-        #   {repository}/s3aas/{version}/images/exordos-s3.raw.gz
+        #   {repository}/s3aas/{version}/images/exordos-s3.raw.zst
         # But exordos build puts them at:
-        #   {output_dir}/images/exordos-s3.raw.gz
+        #   {output_dir}/images/exordos-s3.raw.zst
         # Create a symlink tree so the HTTP server can serve the
         # expected URL structure from the output directory root.
         _create_image_symlinks(output_dir)
