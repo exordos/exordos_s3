@@ -132,7 +132,9 @@ class TestPolicyUpdatePreservesAccess:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # PutObject should fail with read-only
         with pytest.raises(botocore.exceptions.ClientError) as exc_info:

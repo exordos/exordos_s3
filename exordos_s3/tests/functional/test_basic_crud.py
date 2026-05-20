@@ -193,7 +193,9 @@ class TestS3DataOperations:
 
         # Upload via authenticated client
         client = list(s3_clients.values())[0]
-        s3_conftest.upload_test_object(client, bucket_name, "public-obj", b"public-data")
+        s3_conftest.upload_test_object(
+            client, bucket_name, "public-obj", b"public-data"
+        )
 
         # Anonymous GET on public bucket should work
         url = f"http://{s3_endpoint}/{bucket_name}/public-obj"
@@ -231,7 +233,7 @@ class TestQuotaEnforcement:
         # Large upload should fail
         with pytest.raises(botocore.exceptions.ClientError) as exc_info:
             client.put_object(Bucket=bucket_name, Key="big", Body=b"x" * 2048)
-        assert 'Bucket quota exceeded' in exc_info.value.response["Error"]["Message"]
+        assert "Bucket quota exceeded" in exc_info.value.response["Error"]["Message"]
 
 
 class TestObjectLockRetention:
@@ -272,9 +274,11 @@ class TestObjectLockRetention:
         # Delete should fail due to retention
         with pytest.raises(botocore.exceptions.ClientError) as exc_info:
             client.delete_object(Bucket=bucket_name, Key="locked-obj")
-        assert "AccessDenied" in exc_info.value.response["Error"]["Code"] or \
-            "InvalidArgument" in exc_info.value.response["Error"]["Code"] or \
-            "ObjectLocked" in exc_info.value.response["Error"]["Code"]
+        assert (
+            "AccessDenied" in exc_info.value.response["Error"]["Code"]
+            or "InvalidArgument" in exc_info.value.response["Error"]["Code"]
+            or "ObjectLocked" in exc_info.value.response["Error"]["Code"]
+        )
 
 
 class TestBucketROFields:
@@ -291,9 +295,7 @@ class TestBucketROFields:
         # Attempt to update name should fail or be ignored
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
         with pytest.raises(Exception):
-            s3_api_client.update(
-                collection, uuid=bucket["uuid"], name="new-name"
-            )
+            s3_api_client.update(collection, uuid=bucket["uuid"], name="new-name")
 
     def test_versioning_enabled_read_only(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
@@ -319,9 +321,7 @@ class TestBucketROFields:
 class TestInstanceDiskSizeUpdate:
     """Instance disk_size can be increased but not shrunk."""
 
-    def test_disk_size_grow_ok(
-        self, s3_api_client, s3_instance_uuid
-    ):
+    def test_disk_size_grow_ok(self, s3_api_client, s3_instance_uuid):
         collection = s3_conftest.S3_INSTANCES
         instance = s3_api_client.get(collection, uuid=s3_instance_uuid)
         old_size = instance.get("disk_size", 0)
@@ -330,9 +330,7 @@ class TestInstanceDiskSizeUpdate:
         updated = s3_api_client.get(collection, uuid=s3_instance_uuid)
         assert updated["disk_size"] == new_size
 
-    def test_disk_size_shrink_fails(
-        self, s3_api_client, s3_instance_uuid
-    ):
+    def test_disk_size_shrink_fails(self, s3_api_client, s3_instance_uuid):
         collection = s3_conftest.S3_INSTANCES
         instance = s3_api_client.get(collection, uuid=s3_instance_uuid)
         old_size = instance.get("disk_size", 0)

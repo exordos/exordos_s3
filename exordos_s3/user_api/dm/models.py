@@ -96,8 +96,7 @@ class S3Instance(
     root_secret = properties.property(
         types.String(min_length=1, max_length=256),
         default=lambda: "".join(
-            secrets.choice(ROOT_SECRET_ALPHABET)
-            for _ in range(ROOT_SECRET_LENGTH)
+            secrets.choice(ROOT_SECRET_ALPHABET) for _ in range(ROOT_SECRET_LENGTH)
         ),
     )
     version = relationships.relationship(S3Version, required=True, read_only=True)
@@ -214,9 +213,7 @@ class S3Policy(InstanceChildModel):
     content = properties.property(types.Dict(), required=True)
 
     def delete(self, session=None, **kwargs):
-        u.remove_nested_dm(
-            S3UserPolicyAttachment, "policy", self, session=session
-        )
+        u.remove_nested_dm(S3UserPolicyAttachment, "policy", self, session=session)
         return super().delete(session=session, **kwargs)
 
 

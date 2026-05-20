@@ -95,7 +95,9 @@ class TestPolicyAllowsOwnBucket:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # All operations should succeed
         client.put_object(Bucket=bucket_name, Key="test-obj", Body=b"data")
@@ -137,7 +139,9 @@ class TestPolicyDeniesOtherBucket:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # PutObject on bucket_a succeeds
         client.put_object(Bucket=bucket_a, Key="obj", Body=b"ok")
@@ -187,7 +191,9 @@ class TestReadOnlyPolicy:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # ListBucket and GetObject should work (if objects exist)
         client.list_objects_v2(Bucket=bucket_name)
@@ -245,7 +251,9 @@ class TestSeparateUserAccess:
         key_x = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user_x["uuid"], s3_project_id, s3_endpoint
         )
-        client_x = s3_conftest.make_s3_client(s3_endpoint, key_x["access_key"], key_x["secret_key"])
+        client_x = s3_conftest.make_s3_client(
+            s3_endpoint, key_x["access_key"], key_x["secret_key"]
+        )
 
         # User Y has access to bucket_y
         user_y = s3_conftest.create_user_via_api(
@@ -268,7 +276,9 @@ class TestSeparateUserAccess:
         key_y = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user_y["uuid"], s3_project_id, s3_endpoint
         )
-        client_y = s3_conftest.make_s3_client(s3_endpoint, key_y["access_key"], key_y["secret_key"])
+        client_y = s3_conftest.make_s3_client(
+            s3_endpoint, key_y["access_key"], key_y["secret_key"]
+        )
 
         # User X can write to bucket_x
         client_x.put_object(Bucket=bucket_x, Key="x-obj", Body=b"x-data")
@@ -320,7 +330,9 @@ class TestDetachPolicy:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # Access works with policy attached
         client.put_object(Bucket=bucket_name, Key="obj", Body=b"ok")
@@ -371,7 +383,9 @@ class TestPolicyDeletion:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # Access works with policy
         client.put_object(Bucket=bucket_name, Key="obj", Body=b"ok")
@@ -427,19 +441,31 @@ class TestMultiplePoliciesPerUser:
             s3_project_id,
         )
         s3_conftest.attach_policy_via_api(
-            s3_api_client, s3_instance_uuid, user["uuid"], policy_a["uuid"], s3_project_id
+            s3_api_client,
+            s3_instance_uuid,
+            user["uuid"],
+            policy_a["uuid"],
+            s3_project_id,
         )
         s3_conftest.attach_policy_via_api(
-            s3_api_client, s3_instance_uuid, user["uuid"], policy_b["uuid"], s3_project_id
+            s3_api_client,
+            s3_instance_uuid,
+            user["uuid"],
+            policy_b["uuid"],
+            s3_project_id,
         )
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # Wait for policies to propagate to the dataplane
         s3_conftest._wait_for_access_key_sync(
-            s3_endpoint, key["access_key"], key["secret_key"],
+            s3_endpoint,
+            key["access_key"],
+            key["secret_key"],
         )
 
         # User can write to both buckets (cumulative)

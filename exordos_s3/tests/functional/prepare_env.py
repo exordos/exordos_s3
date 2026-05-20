@@ -55,7 +55,6 @@ import tempfile
 import time
 
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -237,9 +236,7 @@ def _get_primary_manifest(output_dir: pathlib.Path) -> str:
     """Return the manifest path for the primary element from inventory.json."""
     inventory_path = output_dir / "inventory.json"
     if not inventory_path.exists():
-        raise FileNotFoundError(
-            f"No inventory.json found at {inventory_path}"
-        )
+        raise FileNotFoundError(f"No inventory.json found at {inventory_path}")
 
     with open(inventory_path) as f:
         inventories = json.load(f)
@@ -425,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-proxy",
         default=os.environ.get(
             "NO_PROXY",
-            "10.20.0.0/22,localhost,127.0.0.1,repository.genesis-core.tech",
+            "10.20.0.0/22,localhost,127.0.0.1,repo.exordos.com",
         ),
         help="NO_PROXY value for exordos CLI calls",
     )

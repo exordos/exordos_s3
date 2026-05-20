@@ -611,7 +611,11 @@ def create_user_via_api(
 
 
 def create_policy_via_api(
-    s3_api_client, instance_uuid: str, name: str, content: dict, project_id: str,
+    s3_api_client,
+    instance_uuid: str,
+    name: str,
+    content: dict,
+    project_id: str,
     **kwargs,
 ) -> dict:
     """Create a policy via S3 CP API."""
@@ -672,7 +676,9 @@ def create_access_key_via_api(
     # returning AccessDenied — in that case, fall back to a fixed sleep.
     try:
         _wait_for_access_key_sync(
-            s3_endpoint, result["access_key"], result["secret_key"],
+            s3_endpoint,
+            result["access_key"],
+            result["secret_key"],
         )
     except TimeoutError:
         # Key likely synced but user has no list permission —

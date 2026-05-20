@@ -71,7 +71,9 @@ class TestAccessKeyCreation:
         assert "secret_key" in key
 
         # Verify key can access bucket
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
         client.put_object(Bucket=bucket_name, Key="test", Body=b"works")
         resp = client.get_object(Bucket=bucket_name, Key="test")
         assert resp["Body"].read() == b"works"
@@ -112,7 +114,9 @@ class TestAccessKeyCreation:
         assert key.get("secret_key") is not None
 
         # GET the same key — secret_key should be hidden
-        keys_collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/users/{user['uuid']}/keys/"
+        keys_collection = (
+            f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/users/{user['uuid']}/keys/"
+        )
         fetched = s3_api_client.filter(keys_collection)
         matching = [k for k in fetched if k["access_key"] == key["access_key"]]
         assert len(matching) == 1
@@ -159,11 +163,15 @@ class TestAccessKeyDeletion:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
         client.list_objects_v2(Bucket=bucket_name)  # works
 
         # Delete key via CP API
-        keys_collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/users/{user['uuid']}/keys/"
+        keys_collection = (
+            f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/users/{user['uuid']}/keys/"
+        )
         s3_api_client.delete(keys_collection, uuid=key["uuid"])
 
         # Wait for dataplane sync (key deletion needs time to propagate)
@@ -216,7 +224,9 @@ class TestUserDeletion:
         key = s3_conftest.create_access_key_via_api(
             s3_api_client, s3_instance_uuid, user["uuid"], s3_project_id, s3_endpoint
         )
-        client = s3_conftest.make_s3_client(s3_endpoint, key["access_key"], key["secret_key"])
+        client = s3_conftest.make_s3_client(
+            s3_endpoint, key["access_key"], key["secret_key"]
+        )
 
         # Access works before deletion
         client.list_objects_v2(Bucket=bucket_name)

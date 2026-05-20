@@ -27,8 +27,7 @@ from exordos_s3.user_api.api import routes as app_routes
 from exordos_s3.user_api.api import versions
 from exordos_s3 import version as app_version
 
-skip_auth_endpoints = [
-]
+skip_auth_endpoints = []
 
 
 class UserApiApp(routes.RootRoute):
