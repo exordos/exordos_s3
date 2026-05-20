@@ -85,7 +85,7 @@ if [[ "$SDK_DEV_MODE" == "true" ]]; then
 fi
 
 # Create links to venv
-sudo ln -sf "$VENV_PATH/bin/genesis-universal-agent" "/usr/bin/exordos-s3-agent"
+sudo ln -sf "$VENV_PATH/bin/exordos-universal-agent" "/usr/bin/exordos-s3-agent"
 
 deactivate
 
