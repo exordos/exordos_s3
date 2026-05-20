@@ -59,7 +59,7 @@ class S3Instance(models.S3Instance, ua_models.InstanceWithDerivativesMixin):
         )
 
     OnReloadFunc = sdk_models.OnChangeShell(
-        command="systemctl try-reload-or-restart genesis-rustfs"
+        command="systemctl try-reload-or-restart exordos-rustfs"
     )
 
     def _create_config(self, node_uuid, project_id, content=""):

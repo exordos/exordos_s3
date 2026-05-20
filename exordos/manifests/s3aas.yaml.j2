@@ -164,7 +164,7 @@ resources:
       username: s3aas
       first_name: "S3aaS system user"
       last_name: "S3aaS system user"
-      email: "noreply+s3aas@genesis-core.tech"
+      email: "noreply+s3aas@exordos.com"
       password: $core.secret.passwords.$s3aas_user_password:value
 
   $core.iam.rolebinding:
@@ -227,7 +227,7 @@ resources:
         kind: "disks"
         disks:
           - size: 6
-            image: "{{ repository | default('https://repository.genesis-core.tech/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3.raw.zst"
+            image: "{{ repository | default('https://repo.exordos.com/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3.raw.zst"
             label: root
 
   # Config
@@ -256,7 +256,7 @@ resources:
   $s3aas.types.s3.versions:
     rustfs_1:
       name: "rustfs_1"
-      image: "{{ repository | default('https://repository.genesis-core.tech/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3-dp.raw.zst"
+      image: "{{ repository | default('https://repo.exordos.com/exordos-elements') }}/s3aas/{{ version }}/images/exordos-s3-dp.raw.zst"
 
   $s3aas.imports.$core_local_domain.records:
     s3aas_cp:

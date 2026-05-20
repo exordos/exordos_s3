@@ -48,7 +48,7 @@ jobs:
         run: uv tool install tox --with tox-uv
       - name: Install exordos cli
         run: |
-          curl -fsSL https://repository.genesis-core.tech/install.sh | sudo sh
+          curl -fsSL https://repo.exordos.com/install.sh | sudo sh
       - name: Build exordos core
         run: |
           cd ../
@@ -56,7 +56,7 @@ jobs:
           cd ./exordos_core
           export ALLOW_USER_PASSWD=true
           export FREQUENT_LOG_VACUUM=true
-          exordos build -f . --manifest-var repository=https://repository.genesis-core.tech
+          exordos build -f . --manifest-var repository=https://repo.exordos.com
           cd $GITHUB_WORKSPACE
       - name: Bootstrap exordos_core
         run: |
@@ -64,7 +64,7 @@ jobs:
           exordos bootstrap -i ./output/inventory.json -f -m core --hyper-storage-pool default --save-admin-password-file ./admin_password.txt
           export ADMIN_PASSWORD=$(cat ./admin_password.txt)
           echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> $GITHUB_ENV
-          sudo curl http://repository.genesis-core.tech:8081/1af41041/latest/1af41041.rom --output /usr/share/qemu/1af41041.rom
+          sudo curl https://repo.exordos.com/1af41041/latest/1af41041.rom --output /usr/share/qemu/1af41041.rom
           cd -
       - name: Wait for Exordos Core API
         run: |
