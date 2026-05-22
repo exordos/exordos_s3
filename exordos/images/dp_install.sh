@@ -44,7 +44,9 @@ sudo apt install -y \
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64)
-        RUSTFS_PKG_URL="https://dl.rustfs.com/artifacts/rustfs/release/rustfs-linux-x86_64-gnu-latest.zip"
+        # temporary download from exordos repo due to download error from github
+        RUSTFS_PKG_URL="https://repo.exordos.com/rustfs/rustfs-linux-x86_64-gnu-latest.zip"
+        # RUSTFS_PKG_URL="https://dl.rustfs.com/artifacts/rustfs/release/rustfs-linux-x86_64-gnu-latest.zip"
         ;;
     aarch64)
         RUSTFS_PKG_URL="https://dl.rustfs.com/artifacts/rustfs/release/rustfs-linux-aarch64-gnu-latest.zip"
