@@ -31,3 +31,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.uv]
 package = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["exordos_paas_s3*"]
+
+[tool.setuptools.package-data]
+exordos_paas_s3 = ["migrations/*.py"]
