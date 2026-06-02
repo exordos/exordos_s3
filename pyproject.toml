@@ -29,6 +29,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0,<9.0.0",
+    "pytest-timer>=1.0.0,<2.0.0",
+    "boto3>=1.26.0,<2.0.0",
+    "exordos>=2.0.0,<3.0.0",
+]
+
 [tool.uv]
 package = true
 
