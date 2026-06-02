@@ -1,0 +1,49 @@
+name: "example_s3"
+description: "Example: an S3 instance hosted by the metapaas control plane, created declaratively via the s3aas element API"
+schema_version: 1
+version: "{{ version }}"
+api_version: "v1"
+
+requirements:
+  core:
+    from_version: "0.0.0"
+  s3aas:
+    from_version: "0.0.0"
+
+resources:
+
+  # An s3 instance in the metapaas project. The metapaas db-back core-agent
+  # reconciles this into the metapaas DB (kind em_s3aas_types_s3_instances);
+  # the s3 plugin's infra builder then launches a rustfs dataplane node for it.
+  $s3aas.types.s3.instances:
+    example_s3:
+      name: "example-s3"
+      project_id: "4d657461-0000-0000-0000-000000000002"
+      cpu: 1
+      ram: 1024
+      disk_size: 10
+      nodes_number: 1
+      kind: "single_node"
+      version: $example_s3.imports.$rustfs_1:uuid
+
+  $s3aas.types.s3.instances.$example_s3.buckets:
+    test_bucket:
+      name: "test-bucket"
+      project_id: "4d657461-0000-0000-0000-000000000002"
+      instance: $s3aas.types.s3.instances.$example_s3:uuid
+      versioning_enabled: false
+      quota_bytes: 0
+      object_lock_enabled: false
+      public: true
+
+imports:
+  rustfs_1:
+    element: "$s3aas"
+    kind: "resource"
+    link: "$s3aas.types.s3.versions.$rustfs_1"
+
+exports:
+  instance:
+    link: "$s3aas.types.s3.instances.$example_s3"
+  test_bucket:
+    link: "$s3aas.types.s3.instances.$example_s3.buckets.$test_bucket"
