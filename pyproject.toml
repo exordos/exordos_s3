@@ -29,16 +29,73 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 
+[project.urls]
+homepage = "https://github.com/infraguys/metapaas_s3/"
+
 [project.optional-dependencies]
+dev = [
+    "tox>=4.0.0",
+    "tox-uv",
+    "pytest>=7.0.0",
+]
 test = [
+    "coverage>=4.0",
+    "mock>=3.0.5,<4.0.0",
     "pytest>=8.0.0,<9.0.0",
     "pytest-timer>=1.0.0,<2.0.0",
     "boto3>=1.26.0,<2.0.0",
     "exordos>=2.0.0,<3.0.0",
 ]
+ruff = [
+    "ruff",
+]
+mypy = [
+    "mypy",
+]
 
 [tool.uv]
 package = true
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+target-version = "py310"
+exclude = [".venv", "build", "dist", "output", "__pycache__"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+fixable = ["ALL"]
+
+[tool.coverage.run]
+branch = true
+source = ["exordos_paas_s3"]
+command_line = "-m pytest -s exordos_paas_s3/tests/unit"
+omit = ["exordos_paas_s3/tests/*", ".venv"]
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]
+ignore_errors = true
+
+[tool.coverage.html]
+directory = "cover"
+
+[tool.coverage.xml]
+output = "cover/coverage.xml"
+
+[tool.mypy]
+files = ["exordos_paas_s3"]
+python_version = "3.12"
+disallow_untyped_defs = true
+show_error_codes = true
+no_implicit_optional = true
+warn_return_any = false
+warn_unused_ignores = true
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 where = ["."]
