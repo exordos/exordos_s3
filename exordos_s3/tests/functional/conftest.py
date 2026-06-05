@@ -23,12 +23,10 @@ import uuid as sys_uuid
 import boto3
 import botocore.config
 import botocore.exceptions
-import pytest
+from exordos.clients import base_client
 from gcl_iam.tests.functional import clients as iam_clients
 from gcl_sdk.clients.http import base as http_client
-
-from exordos.clients import base_client
-
+import pytest
 
 # --- Environment configuration ---
 

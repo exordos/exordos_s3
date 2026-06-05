@@ -18,16 +18,15 @@ import enum
 import secrets
 import string
 
+from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.dm import filters as dm_filters
 from restalchemy.dm import models
 from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
 from restalchemy.storage.sql import orm
-from gcl_sdk.agents.universal.dm import models as ua_models
 
 from exordos_s3.common import utils as u
-
 
 # Lengths and alphabets for S3 credential generation
 ACCESS_KEY_LENGTH = 20
