@@ -14,7 +14,7 @@
 
 from restalchemy.api import routes
 
-from exordos_paas_s3 import controllers
+from exordos_s3.controlplane.api import controllers
 
 
 class S3AccessKeyRoute(routes.Route):

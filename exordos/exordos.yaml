@@ -16,21 +16,15 @@ build:
   deps:
     - dst: /opt/exordos_metapaas
       path:
-        src: ../../metapaas_s3
+        src: ../../exordos_s3
       exclude:
         - .venv
         - .tox
         - output
 
-    - dst: /opt/gcl_sdk
-      optional: true
-      path:
-        env: LOCAL_GENESIS_SDK_PATH
-
   elements:
-    # s3aas install manifest: registers the s3 PaaS type in metapaas,
-    # IAM permissions and the s3aas-namespaced dataplane version.
-    - manifest: manifests/s3aas.yaml.j2
+    # Communal shared S3 instance for platform-wide use.
+    - manifest: manifests/communal_s3.yaml.j2
 
     # Example consumer element: declaratively creates an s3 instance + bucket.
     - manifest: manifests/example_s3.yaml.j2

@@ -19,11 +19,11 @@ import typing as tp
 import uuid
 import uuid as sys_uuid
 
-from gcl_looper.services.oslo import base as oslo_base
 from gcl_sdk.agents.universal.dm import models as ua_models
 from gcl_sdk.paas.services import builder
+from restalchemy.storage import exceptions as storage_exceptions
 
-from exordos_paas_s3 import paas_models as models
+from exordos_s3.controlplane.paas.dm import models
 
 LOG = logging.getLogger(__name__)
 AGENT_UUID5_NAME = "s3aas"
@@ -52,7 +52,7 @@ class PaaSBuilder(builder.PaaSBuilder):
         return scheduled
 
 
-class S3InstanceBuilder(PaaSBuilder, oslo_base.OsloConfigurableService):
+class S3InstanceBuilder(PaaSBuilder):
     def __init__(
         self,
         instance_model: tp.Type[models.S3Instance] = models.S3Instance,
@@ -129,8 +129,17 @@ class S3InstanceBuilder(PaaSBuilder, oslo_base.OsloConfigurableService):
         users = self._get_users(instance)
         access_keys = self._get_access_keys(instance)
 
-        nodeset = instance.get_actual_nodeset()
+        try:
+            nodeset = instance.get_actual_nodeset()
+        except storage_exceptions.RecordNotFound:
+            LOG.debug(
+                "Nodeset for s3 instance %s not ready yet, skipping", instance.uuid
+            )
+            return []
+
         nodes_by_idx = list(nodeset.nodes.keys())
+        if not nodes_by_idx:
+            return []
 
         # Create S3InstanceNode for each node in the cluster
         for i in range(instance.nodes_number):

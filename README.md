@@ -58,7 +58,7 @@ Wait for both elements to become ACTIVE.
 ```bash
 curl -X POST http://metapaas-cp:8080/v1/types/s3/instances \
   -H 'Content-Type: application/json' \
-  -u metapaas:<metapaas-password> \
+  -H 'Authorization: Bearer <token>' \
   -d '{
     "name": "s3-data",
     "version": "0.0.1",
@@ -318,7 +318,7 @@ Verify data-plane node is ACTIVE and reachable:
 ```bash
 # Get node IP from instance
 curl -s http://metapaas-cp:8080/v1/types/s3/instances/<id> \
-  -u metapaas:<pass> | jq '.nodes[].ip'
+  -H 'Authorization: Bearer <token>' | jq '.nodes[].ip'
 
 # Test connectivity
 telnet <ip> 9000
@@ -358,7 +358,7 @@ Permissions are bound to **METAPAAS_PROJECT_ID**, not instance project. Users mu
 
 - **MetaPaaS Platform:** [../exordos_metapaas/](../exordos_metapaas/)
 - **How to Build New PaaS:** [../exordos_metapaas/HOW_TO_BUILD_NEW_PAAS.md](../exordos_metapaas/HOW_TO_BUILD_NEW_PAAS.md)
-- **Mail-aas Blueprint:** [../metapaas_mail/](../metapaas_mail/) (reference plugin, simpler than s3aas)
+- **Mail-aas Blueprint:** [../exordos_mail/](../exordos_mail/) (reference plugin, simpler than s3aas)
 - **Exordos Core:** https://github.com/exordos/exordos_core
 
 ## License

@@ -18,7 +18,7 @@ from restalchemy.api import controllers as ra_controllers
 from restalchemy.api import field_permissions as field_p
 from restalchemy.api import resources as ra_resources
 
-from exordos_paas_s3 import models
+from exordos_s3.controlplane.dm import models
 
 
 class S3Controller(ra_controllers.RoutesListController):

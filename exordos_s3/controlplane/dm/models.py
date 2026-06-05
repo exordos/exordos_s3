@@ -26,7 +26,7 @@ from restalchemy.dm import types
 from restalchemy.storage.sql import orm
 from gcl_sdk.agents.universal.dm import models as ua_models
 
-from exordos_paas_s3 import utils as u
+from exordos_s3 import utils as u
 
 
 # Lengths and alphabets for S3 credential generation

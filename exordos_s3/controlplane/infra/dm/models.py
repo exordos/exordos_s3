@@ -21,8 +21,8 @@ from gcl_sdk.agents.universal.dm import models as ua_models
 from gcl_sdk.infra import constants as sdk_c
 from gcl_sdk.infra.dm import models as sdk_models
 
-from exordos_paas_s3 import constants as c
-from exordos_paas_s3 import models
+from exordos_s3 import constants as c
+from exordos_s3.controlplane.dm import models
 
 ROOT_DISK_SIZE = 6
 

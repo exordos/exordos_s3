@@ -37,7 +37,7 @@ from restalchemy.common import singletons
 from restalchemy.dm import properties
 from restalchemy.dm import types as ra_types
 
-from exordos_paas_s3 import constants
+from exordos_s3 import constants
 
 LOG = logging.getLogger(__name__)
 

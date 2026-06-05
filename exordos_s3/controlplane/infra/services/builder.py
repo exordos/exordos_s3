@@ -16,20 +16,16 @@
 
 import logging
 import typing as tp
-import uuid
 import uuid as sys_uuid
 
-from gcl_looper.services.oslo import base as oslo_base
 from gcl_sdk.agents.universal.dm import models as ua_models
 from gcl_sdk.agents.universal.drivers import core as core_drivers
-from gcl_sdk.common.oslo import types as sdk_cfg_types
 from gcl_sdk.infra import constants as sdk_c
 from gcl_sdk.infra.dm import models as sdk_models
 from gcl_sdk.infra.services import builder
-from oslo_config import cfg
 from restalchemy.dm import filters as dm_filters
 
-from exordos_paas_s3 import infra_models as models
+from exordos_s3.controlplane.infra.dm import models
 
 LOG = logging.getLogger(__name__)
 NODE_KIND = sdk_models.Node.get_resource_kind()
@@ -50,12 +46,12 @@ RUSTFS_OBS_LOGGER_LEVEL=error
 """
 
 
-class CoreInfraBuilder(builder.CoreInfraBuilder, oslo_base.OsloConfigurableService):
+class CoreInfraBuilder(builder.CoreInfraBuilder):
     def __init__(
         self,
-        core_username,
-        core_password,
-        core_api_base_url,
+        core_username: str,
+        core_password: str,
+        core_api_base_url: str,
         project_id: sys_uuid.UUID,
         instance_model: tp.Type[models.S3Instance] = models.S3Instance,
     ):
@@ -72,69 +68,62 @@ class CoreInfraBuilder(builder.CoreInfraBuilder, oslo_base.OsloConfigurableServi
         )
         self._cclient = self.core_driver._client._client
 
-    @classmethod
-    def svc_get_config_opts(cls) -> tp.Collection[cfg.Opt]:
-        return [
-            cfg.StrOpt(
-                "core_username",
-                default="exordos_s3",
-                help=("User to work with Core."),
-            ),
-            cfg.StrOpt(
-                "core_password",
-                default="exordos_s3",
-                help=("User password to work with Core."),
-            ),
-            cfg.StrOpt(
-                "core_api_base_url",
-                default="http://core.local.genesis-core.tech:11010",
-                help=("Core's user api endpoint."),
-            ),
-            sdk_cfg_types.UuidOpt(
-                "project_id",
-                help=("Project id to work with Core."),
-            ),
-        ]
-
     def create_infra(
         self, instance: models.S3Instance
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
-        """Create a list of infrastructure objects.
-
-        The method returns a list of infrastructure objects that are required
-        for the instance. For example, nodes, sets, configs, etc.
-        """
-        return instance.get_infra(self._project_id)
+        return self.actualize_infra(instance, builder.InfraCollection(infra_objects=()))
 
     def actualize_infra(
         self,
         instance: models.S3Instance,
         infra: builder.InfraCollection,
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
-        """Actualize the infrastructure objects.
-
-        The method is called when the instance is outdated. For example,
-        the instance `Config` has derivative `Render`. Single `Config` may
-        have multiple `Render` derivatives. If any of the derivatives is
-        outdated, this method is called to reactualize this infrastructure.
-        """
-        nodeset = None
-        configs = []
+        nodeset_target = None
+        nodeset_actual = None
 
         for target, actual in infra.infra_objects:
             if target.get_resource_kind() == NODE_SET_KIND:
-                nodeset = actual
-            elif actual.get_resource_kind() == CONFIG_KIND:
-                configs.append(actual)
+                nodeset_target = target
+                nodeset_actual = actual
 
-        if nodeset.nodes:
-            instance.ipsv4 = [node["ipv4"] for node in nodeset.nodes.values()]
+        # Bootstrap: no NodeSet target yet — create it from instance spec
+        if nodeset_target is None:
+            for obj in instance.get_infra(self._project_id):
+                if obj.get_resource_kind() == NODE_SET_KIND:
+                    nodeset_target = obj
+                    break
+            instance.status = sdk_c.InstanceStatus.IN_PROGRESS.value
+            return (nodeset_target,) if nodeset_target is not None else ()
 
-        new_objects = []
+        # Keep NodeSet target in sync with current instance spec
+        nodeset_target.cores = instance.cpu
+        nodeset_target.ram = instance.ram
+        nodeset_target.disk_spec = sdk_models.SetDisksSpec(
+            disks=[
+                {
+                    "size": models.ROOT_DISK_SIZE,
+                    "image": instance.version.image,
+                    "label": "root",
+                },
+                {
+                    "size": instance.disk_size,
+                    "label": "data",
+                },
+            ]
+        )
+        nodeset_target.replicas = instance.nodes_number
 
-        # Retrieve private keys for nodes
+        # Actual NodeSet not yet provisioned
+        if nodeset_actual is None:
+            instance.status = sdk_c.InstanceStatus.IN_PROGRESS.value
+            return (nodeset_target,)
+
+        if nodeset_actual.nodes:
+            instance.ipsv4 = [node["ipv4"] for node in nodeset_actual.nodes.values()]
+
+        # Sync private keys for DP nodes into local DB
         node_keys = self._cclient.do_action(
-            "/v1/compute/sets/", "get_private_keys", nodeset.uuid
+            "/v1/compute/sets/", "get_private_keys", nodeset_actual.uuid
         )
         for u, v in node_keys.items():
             if nkey := ua_models.NodeEncryptionKey.objects.get_one_or_none(
@@ -143,16 +132,15 @@ class CoreInfraBuilder(builder.CoreInfraBuilder, oslo_base.OsloConfigurableServi
                 nkey.private_key = v
                 nkey.update()
             else:
-                nkey = ua_models.NodeEncryptionKey(uuid=uuid.UUID(u), private_key=v)
+                nkey = ua_models.NodeEncryptionKey(uuid=sys_uuid.UUID(u), private_key=v)
                 nkey.insert()
 
-        node_addresses = [node["ipv4"] for node in nodeset.nodes.values()]
+        node_addresses = [node["ipv4"] for node in nodeset_actual.nodes.values()]
 
         # Handle node shrink
-        nodes_diff_num = instance.nodes_number - len(node_addresses)
-        if nodes_diff_num < 0:
+        if instance.nodes_number < len(node_addresses):
             node_addresses = node_addresses[: instance.nodes_number]
-            for idx, del_node_uuid in enumerate(nodeset.nodes.keys()):
+            for idx, del_node_uuid in enumerate(nodeset_actual.nodes.keys()):
                 if idx < instance.nodes_number:
                     continue
                 for key in ua_models.NodeEncryptionKey.objects.get_all(
@@ -161,56 +149,23 @@ class CoreInfraBuilder(builder.CoreInfraBuilder, oslo_base.OsloConfigurableServi
                     key.delete()
 
         # Recreate configs for each node
-        for node_uuid, node in nodeset.nodes.items():
+        new_configs = []
+        for node_uuid_str, _ in nodeset_actual.nodes.items():
             content = RUSTFS_CONF_TEMPLATE.format(
-                cluster_name=instance.name,
-                node_name=node_uuid,
-                node_ip=node["ipv4"],
-                node_addresses=node_addresses,
                 root_user="admin",
                 root_secret=instance.root_secret,
             )
             config = instance._create_config(
-                uuid.UUID(node_uuid), self._project_id, content
+                sys_uuid.UUID(node_uuid_str), self._project_id, content
             )
-            new_objects.append(config)
-
-        tgt_nodeset = None
-
-        for target, _ in infra.infra_objects:
-            if target.get_resource_kind() == CONFIG_KIND:
-                # Already regenerated above
-                continue
-            elif target.get_resource_kind() == NODE_SET_KIND:
-                target.cores = instance.cpu
-                target.ram = instance.ram
-                target.disk_spec = sdk_models.SetDisksSpec(
-                    disks=[
-                        {
-                            "size": models.ROOT_DISK_SIZE,
-                            "image": instance.version.image,
-                            "label": "root",
-                        },
-                        {
-                            "size": instance.disk_size,
-                            "label": "data",
-                        },
-                    ]
-                )
-                target.replicas = instance.nodes_number
-                tgt_nodeset = target
-            else:
-                LOG.exception(
-                    "%s kind is not supported here, ignoring...",
-                    target.get_resource_kind(),
-                )
+            new_configs.append(config)
 
         try:
-            instance.status = sdk_c.InstanceStatus(nodeset.status).value
+            instance.status = sdk_c.InstanceStatus(nodeset_actual.status).value
         except ValueError:
             instance.status = sdk_c.InstanceStatus.IN_PROGRESS.value
 
-        return (tgt_nodeset, *new_objects)
+        return (nodeset_target, *new_configs)
 
     def pre_delete_instance_resource(self, resource):
         # Get actual nodeset to clean private keys of its nodes

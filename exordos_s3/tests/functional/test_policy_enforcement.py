@@ -22,7 +22,7 @@ import uuid
 import botocore.exceptions
 import pytest
 
-import exordos_paas_s3.tests.functional.conftest as s3_conftest
+import exordos_s3.tests.functional.conftest as s3_conftest
 
 
 def _make_readwrite_policy(bucket_name: str) -> dict:

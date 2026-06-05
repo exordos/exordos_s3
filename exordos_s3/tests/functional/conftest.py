@@ -17,7 +17,7 @@ from exordos.clients import base_client
 
 # --- Environment configuration ---
 
-EXORDOS_ENDPOINT = os.environ.get("EXORDOS_ENDPOINT", "http://10.20.0.2:11010")
+EXORDOS_ENDPOINT = os.environ.get("EXORDOS_ENDPOINT", "http://10.20.0.2/api/core")
 EXORDOS_USERNAME = os.environ.get("EXORDOS_USERNAME", "admin")
 EXORDOS_PASSWORD = os.environ.get("EXORDOS_PASSWORD", "")
 
@@ -100,10 +100,18 @@ def iam_rest_client() -> iam_clients.GenericAutoRefreshRESTClient:
 
 @pytest.fixture(scope="session")
 def s3_cp_ip(core_client) -> str:
-    """Find the IP of the metapaas-cp compute node via Core API."""
+    """Find the IP of the metapaas-cp compute node.
+
+    Returns the IP extracted from EXORDOS_S3_CP_URL if set (avoids a Core API
+    call that requires an older auth client format).
+    """
+    if EXORDOS_S3_CP_URL:
+        # Parse IP from e.g. "http://10.20.0.20:8080"
+        host = EXORDOS_S3_CP_URL.split("//", 1)[-1].split(":")[0]
+        return host
+
     nodes = core_client.filter(NODE_COLLECTION, name="metapaas-cp")
     if not nodes:
-        # Fall back: any node with 'metapaas' in name
         all_nodes = core_client.filter(NODE_COLLECTION)
         nodes = [n for n in all_nodes if "metapaas" in n.get("name", "").lower()]
     if not nodes:

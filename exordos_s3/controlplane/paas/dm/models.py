@@ -24,7 +24,7 @@ from restalchemy.dm import models as ra_models
 from restalchemy.dm import properties
 from restalchemy.dm import types as ra_types
 
-from exordos_paas_s3 import models
+from exordos_s3.controlplane.dm import models
 
 
 class S3InstanceNode(

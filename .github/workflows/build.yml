@@ -1,0 +1,125 @@
+name: build
+
+on:
+  push:
+  pull_request:
+    types: [opened]
+
+env:
+  PACKER_VERSION: "1.9.2"
+  PYTHON_VERSION: "3.12"
+  CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
+  CORE_USERNAME: "admin"
+  CORE_PASSWORD: "admin"
+  ELEMENT_NAME: s3aas
+
+jobs:
+  Build:
+    runs-on: ubuntu-24.04
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Setup packer
+        uses: hashicorp/setup-packer@main
+        with:
+          version: ${{ env.PACKER_VERSION }}
+
+      - name: Install exordos CLI
+        run: curl -fsSL https://repo.exordos.com/install.sh | sudo sh
+
+      - name: Install hypervisor
+        run: |
+          sudo exordos compute hypervisors init
+          sudo chmod 666 /dev/kvm
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv + tox + build
+        uses: astral-sh/setup-uv@v7
+      - run: |
+          uv tool install tox --with tox-uv
+          pip install build
+
+      - name: Build and push exordos_s3
+        timeout-minutes: 20
+        env:
+          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
+        run: |
+          set -eux
+
+          VERSION="$(exordos get-version .)"
+
+          exordos build $(pwd)
+
+          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
+          exordos push -c exordos/exordos.push.yaml -t exordos_repo -f --latest
+
+          echo "S3AAS_VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Configure exordos settings
+        run: |
+          exordos settings set-realm default --endpoint $CORE_ENDPOINT_URL
+          exordos settings set-context default --name default --user $CORE_USERNAME --password $CORE_PASSWORD
+
+      - name: Bootstrap exordos_core
+        run: exordos bootstrap -i latest -f -m core --admin-password $CORE_PASSWORD --cidr 10.20.0.0/22
+
+      - name: Wait for Exordos Core API
+        run: |
+          for i in {1..60}; do
+            if exordos ready_api; then
+              echo "Exordos Core API is ready"
+              break
+            fi
+            echo "Waiting for Exordos Core API... ($i/60)"
+            sleep 5
+          done
+
+      - name: Set hypervisor with overbooking
+        run: |
+          HYPER_UUID="$(exordos c h l -o json | jq -r .[0]."UUID")"
+          exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
+
+      - name: Build + serve + install (prepare_env.py)
+        run: |
+          tox -e develop
+
+          .tox/develop/bin/python \
+            exordos_s3/tests/functional/prepare_env.py \
+            --project-dir . \
+            --output-dir /tmp/metapaas-s3-build \
+            --endpoint $CORE_ENDPOINT_URL \
+            --username $CORE_USERNAME \
+            --password "${CORE_PASSWORD}" \
+            --wait-timeout 600 \
+            2>&1 | tee /tmp/prepare_env.log
+
+          grep "^  export " /tmp/prepare_env.log | sed 's/^  export //' >> $GITHUB_ENV
+
+      - name: Wait for S3 API
+        run: |
+          CP_URL=$(grep "EXORDOS_S3_CP_URL" $GITHUB_ENV | cut -d= -f2)
+          for i in {1..30}; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CP_URL}/v1/")
+            if echo "$CODE" | grep -qE "200|404"; then
+              echo "MetaPaaS user-api ready (HTTP $CODE)"; exit 0
+            fi
+            echo "Waiting ($i/30) for user-api…"; sleep 10
+          done
+          exit 1
+
+      - name: Run functional tests
+        run: tox -e ${{ env.PYTHON_VERSION }}-functional
+
+      - name: Debug session on failure
+        uses: owenthereal/action-upterm@v1
+        if: failure()
+        with:
+          limit-access-to-actor: true
+          wait-timeout-minutes: 30

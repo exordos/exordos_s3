@@ -23,7 +23,7 @@ import botocore.exceptions
 import pytest
 import requests
 
-import exordos_paas_s3.tests.functional.conftest as s3_conftest
+import exordos_s3.tests.functional.conftest as s3_conftest
 
 
 class TestInstanceLifecycle:

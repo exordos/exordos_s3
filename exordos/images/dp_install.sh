@@ -28,8 +28,6 @@ BOOTSTRAP_PATH="/var/lib/exordos/bootstrap/scripts"
 
 SYSTEMD_SERVICE_DIR=/etc/systemd/system/
 
-DEV_SDK_PATH="/opt/gcl_sdk"
-SDK_DEV_MODE=$([ -d "$DEV_SDK_PATH" ] && echo "true" || echo "false")
 
 # Install packages
 sudo apt update
@@ -74,12 +72,6 @@ sudo chmod +x $BOOTSTRAP_PATH/0100-metapaas-s3-dp-bootstrap.sh
 cd "$GC_PATH"
 uv sync
 source "$GC_PATH/.venv/bin/activate"
-
-# In the dev mode the gcl_sdk package is installed from the local machine
-if [[ "$SDK_DEV_MODE" == "true" ]]; then
-    uv pip uninstall -y gcl_sdk
-    uv pip install -e "$DEV_SDK_PATH"
-fi
 
 # Link the universal agent (loads the S3CapabilityDriver via entry point)
 sudo ln -sf "$VENV_PATH/bin/exordos-universal-agent" "/usr/bin/exordos-universal-agent"

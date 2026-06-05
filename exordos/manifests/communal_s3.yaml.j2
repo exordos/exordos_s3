@@ -1,0 +1,42 @@
+name: "communal_s3"
+description: "Exordos communal S3 element"
+schema_version: 1
+version: "{{ version }}"
+api_version: "v1"
+
+requirements:
+  core:
+    from_version: "0.0.0"
+  s3aas:
+    from_version: "0.0.0"
+
+resources:
+
+  $s3aas.types.s3.instances:
+    communal_s3:
+      name: "communal-s3"
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      cpu: $communal_s3.imports.$var_default_cores:value
+      ram: $communal_s3.imports.$var_default_ram:value
+      disk_size: 50
+      nodes_number: 1
+      kind: "single_node"
+      version: $communal_s3.imports.$rustfs_1:uuid
+
+imports:
+  rustfs_1:
+    element: "$s3aas"
+    kind: "resource"
+    link: "$s3aas.types.s3.versions.$rustfs_1"
+  var_default_cores:
+    element: "$core"
+    kind: "resource"
+    link: "$core.vs.variables.$default_cores"
+  var_default_ram:
+    element: "$core"
+    kind: "resource"
+    link: "$core.vs.variables.$default_ram"
+
+exports:
+  instance:
+    link: "$s3aas.types.s3.instances.$communal_s3"

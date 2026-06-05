@@ -15,8 +15,7 @@
 import os
 
 from exordos_metapaas.registry import PaaSDefinition
-from exordos_paas_s3 import permissions
-from exordos_paas_s3 import routes
+from exordos_s3.controlplane.api import routes
 
 
 class S3Definition(PaaSDefinition):
@@ -34,29 +33,34 @@ class S3Definition(PaaSDefinition):
     def get_migrations_path(self):
         return os.path.join(os.path.dirname(__file__), "migrations")
 
-    def get_builders(self):
+    def get_builders(self, core_username, core_password, core_api_base_url, project_id):
+        from exordos_s3.controlplane.infra.services.builder import CoreInfraBuilder
+        from exordos_s3.controlplane.infra.dm.models import S3Instance as InfraS3Instance
+        from exordos_s3.controlplane.paas.services.builder import S3InstanceBuilder
+        from exordos_s3.controlplane.paas.dm.models import S3Instance as PaaSS3Instance
+
         return [
-            {
-                "service": "exordos_paas_s3.infra_builder:CoreInfraBuilder",
-                "core_creds": True,
-            },
-            {
-                "service": "exordos_paas_s3.paas_builder:S3InstanceBuilder",
-                "core_creds": False,
-            },
+            CoreInfraBuilder(
+                core_username=core_username,
+                core_password=core_password,
+                core_api_base_url=core_api_base_url,
+                project_id=project_id,
+                instance_model=InfraS3Instance,
+            ),
+            S3InstanceBuilder(instance_model=PaaSS3Instance),
         ]
 
     def get_agent_models(self):
         # Keys are resource sub-paths under types.s3; the runtime prefixes them
         # with em_<element>_types_s3_ to match the element-manager target kind.
         return {
-            "versions": "exordos_paas_s3.models:S3Version",
-            "instances": "exordos_paas_s3.infra_models:S3Instance",
-            "instances.buckets": "exordos_paas_s3.models:S3Bucket",
-            "instances.policies": "exordos_paas_s3.models:S3Policy",
-            "instances.users": "exordos_paas_s3.models:S3User",
-            "instances.users.access_keys": "exordos_paas_s3.models:S3AccessKey",
-            "instances.users.policies": "exordos_paas_s3.models:S3UserPolicyAttachment",
+            "versions": "exordos_s3.controlplane.dm.models:S3Version",
+            "instances": "exordos_s3.controlplane.infra.dm.models:S3Instance",
+            "instances.buckets": "exordos_s3.controlplane.dm.models:S3Bucket",
+            "instances.policies": "exordos_s3.controlplane.dm.models:S3Policy",
+            "instances.users": "exordos_s3.controlplane.dm.models:S3User",
+            "instances.users.access_keys": "exordos_s3.controlplane.dm.models:S3AccessKey",
+            "instances.users.policies": "exordos_s3.controlplane.dm.models:S3UserPolicyAttachment",
         }
 
     def get_agent_filters(self):
@@ -71,6 +75,3 @@ class S3Definition(PaaSDefinition):
             "instances.users.access_keys": "project_id",
             "instances.users.policies": "project_id",
         }
-
-    def get_iam_permissions(self):
-        return list(permissions.PERMS_OWNER)

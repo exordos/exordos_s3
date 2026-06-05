@@ -1,5 +1,5 @@
 [project]
-name = "exordos_paas_s3"
+name = "exordos_s3"
 description = "S3 PaaS plugin for the Exordos MetaPaaS runtime"
 readme = "README.md"
 authors = [{name = "Genesis Corporation", email = "mail@gmelikov.ru"}]
@@ -12,16 +12,16 @@ dependencies = [
     "gcl_iam>=1.0.3,<2.0.0",
     "gcl_looper>=1.2.3,<2.0.0",
     "gcl_sdk>=3.0.0,<4.0.0",
-    "exordos_metapaas>=0.0.5",
+    "exordos_metapaas>=0.0.3,<1.0.0",
     "minio>=7.2.0,<8.0.0",
     "requests>=2.28.0,<3.0.0",
 ]
 
 [project.entry-points."exordos_metapaas_paas"]
-s3 = "exordos_paas_s3.definition:S3Definition"
+s3 = "exordos_s3.definition:S3Definition"
 
 [project.entry-points."gcl_sdk_universal_agent"]
-S3CapabilityDriver = "exordos_paas_s3.driver:S3CapabilityDriver"
+S3CapabilityDriver = "exordos_s3.dataplane.driver:S3CapabilityDriver"
 
 [build-system]
 requires = ["setuptools>=75.3.3", "setuptools_scm>=8"]
@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 
 [project.urls]
-homepage = "https://github.com/infraguys/metapaas_s3/"
+homepage = "https://github.com/exordos/exordos_s3/"
 
 [project.optional-dependencies]
 dev = [
@@ -68,9 +68,9 @@ fixable = ["ALL"]
 
 [tool.coverage.run]
 branch = true
-source = ["exordos_paas_s3"]
-command_line = "-m pytest -s exordos_paas_s3/tests/unit"
-omit = ["exordos_paas_s3/tests/*", ".venv"]
+source = ["exordos_s3"]
+command_line = "-m pytest -s exordos_s3/tests/unit"
+omit = ["exordos_s3/tests/*", ".venv"]
 
 [tool.coverage.report]
 exclude_also = [
@@ -88,7 +88,7 @@ directory = "cover"
 output = "cover/coverage.xml"
 
 [tool.mypy]
-files = ["exordos_paas_s3"]
+files = ["exordos_s3"]
 python_version = "3.12"
 disallow_untyped_defs = true
 show_error_codes = true
@@ -99,7 +99,7 @@ ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["exordos_paas_s3*"]
+include = ["exordos_s3*"]
 
 [tool.setuptools.package-data]
-exordos_paas_s3 = ["migrations/*.py"]
+exordos_s3 = ["migrations/*.py"]
