@@ -101,14 +101,23 @@ jobs:
           exordos e e show $ELEMENT_NAME
       - name: Find element CP IP
         run: |
-          sleep 6
-          exordos compute nodes list
-          EL_CP_IP=$(exordos compute nodes list | grep $ELEMENT_NAME-cp | awk -F'│' '{print $7}' | tr -d ' ')
+          for i in {1..20}; do
+            exordos compute nodes list
+            EL_CP_IP=$(exordos compute nodes list -o json | jq -r --arg name "${ELEMENT_NAME}-cp" '.[] | select(.Name == $name) | .IP')
+            if [[ -n "$EL_CP_IP" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ -z "$EL_CP_IP" ]]; then
+            echo "element CP IP was not found"
+            exit 1
+          fi
           echo "EL_CP_IP=$EL_CP_IP" >> $GITHUB_ENV
           echo "Found element CP IP: $EL_CP_IP"
       - name: Wait for element CP API
         run: |
-          for i in {1..60}; do
+          for i in {1..20}; do
             if curl -s -o /dev/null -w "%{http_code}" http://${EL_CP_IP}:8080 | grep -q "200\|401\|403\|404"; then
               echo "element CP API is ready"
               exit 0
@@ -120,16 +129,22 @@ jobs:
           done
           echo "element CP API did not become ready"
           exit 1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      - name: Install requirements
+        run: sudo apt install --yes libev-dev
       - name: Run functional tests
         env:
           EXORDOS_ENDPOINT: ${{ env.CORE_ENDPOINT_URL }}
           EXORDOS_USERNAME: ${{ env.CORE_USERNAME }}
           EXORDOS_PASSWORD: ${{ env.CORE_PASSWORD }}
           EXORDOS_S3_CP_URL: http://${{ env.EL_CP_IP }}:8080
-          EXORDOS_POLL_TIMEOUT: 600
+          EXORDOS_POLL_TIMEOUT: 900
           EXORDOS_POLL_INTERVAL: 15
         run: |
-          tox -e ${PYTHON_VERSION}-functional
+          tox -e py3-functional
       - name: Setup upterm session
         uses: owenthereal/action-upterm@v1
         if: ${{ failure() }}

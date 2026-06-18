@@ -56,9 +56,7 @@ NODE_COLLECTION = "/v1/compute/nodes/"
 
 # IAM constants
 OWNER_ROLE_UUID = "726f6c65-0000-0000-0000-000000000002"
-DEFAULT_CLIENT_UUID = "00000000-0000-0000-0000-000000000000"
-DEFAULT_CLIENT_ID = "GenesisCoreClientId"
-DEFAULT_CLIENT_SECRET = "GenesisCoreSecret"
+DEFAULT_CLIENT_UUID = "default"
 
 
 # --- Auth helpers ---
@@ -103,8 +101,6 @@ def iam_rest_client() -> iam_clients.GenericAutoRefreshRESTClient:
         username=EXORDOS_USERNAME,
         password=EXORDOS_PASSWORD,
         client_uuid=DEFAULT_CLIENT_UUID,
-        client_id=DEFAULT_CLIENT_ID,
-        client_secret=DEFAULT_CLIENT_SECRET,
     )
     endpoint = f"{EXORDOS_ENDPOINT.rstrip('/')}/v1/"
     return iam_clients.GenericAutoRefreshRESTClient(endpoint, auth)

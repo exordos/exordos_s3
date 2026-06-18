@@ -193,25 +193,49 @@ def _create_image_symlinks(output_dir: pathlib.Path) -> None:
 
     The manifest references images as:
         {repository}/{element_name}/{version}/images/{image_file}
-    But exordos build puts them at:
-        {output_dir}/images/{image_file}
 
-    This function reads inventory.json and creates:
-        {output_dir}/{element_name}/{version}/images/{image_file}
-            -> ../../../images/{image_file}
+    New exordos build layout puts them at:
+        {output_dir}/exordos-elements/{name}/{version}/images/{image_file}
+    A single element-level symlink bridges the gap:
+        {output_dir}/{name} -> exordos-elements/{name}
+
+    Legacy exordos build layout puts them at:
+        {output_dir}/images/{image_file}
+    Per-file symlinks are created under {output_dir}/{name}/{version}/images/.
     """
-    inventory_path = output_dir / "inventory.json"
-    if not inventory_path.exists():
+    elements_dir = output_dir / "exordos-elements"
+    new_inventory_path = elements_dir / "inventory.json"
+    old_inventory_path = output_dir / "inventory.json"
+
+    if new_inventory_path.exists():
+        with open(new_inventory_path) as f:
+            data = json.load(f)
+        elements = data.get("elements", {})
+        created = 0
+        for name, versions in elements.items():
+            for info in versions.values():
+                if not info.get("images"):
+                    continue
+                link = output_dir / name
+                src = pathlib.Path("exordos-elements") / name
+                if not link.exists():
+                    link.symlink_to(src)
+                    _log(f"  Symlink: {link} -> {src}")
+                    created += 1
+        if created:
+            _log("Image symlinks created")
+        return
+
+    if not old_inventory_path.exists():
         _log("WARNING: No inventory.json found, skipping symlink creation")
         return
 
-    with open(inventory_path) as f:
+    with open(old_inventory_path) as f:
         inventories = json.load(f)
 
     if not isinstance(inventories, list):
         inventories = [inventories]
 
-    # Use only the first inventory entry — it's the primary element
     inv = inventories[0]
     name = inv["name"]
     version = inv["version"]
@@ -232,7 +256,43 @@ def _create_image_symlinks(output_dir: pathlib.Path) -> None:
 
 
 def _get_primary_manifest(output_dir: pathlib.Path) -> str:
-    """Return the manifest path for the primary element from inventory.json."""
+    """Return the manifest path for the primary element from inventory.json.
+
+    Supports both the new layout ({output_dir}/exordos-elements/inventory.json)
+    and the legacy layout ({output_dir}/inventory.json).  The primary element
+    is the first one that ships images; if none do, the first element is used.
+    """
+    elements_dir = output_dir / "exordos-elements"
+    new_inventory_path = elements_dir / "inventory.json"
+
+    if new_inventory_path.exists():
+        with open(new_inventory_path) as f:
+            data = json.load(f)
+        elements = data.get("elements", {})
+        if not elements:
+            raise FileNotFoundError(
+                f"No elements listed in {new_inventory_path}"
+            )
+        # Prefer the first element that has images (the deployable one).
+        primary: dict | None = None
+        for versions in elements.values():
+            for info in versions.values():
+                if primary is None or info.get("images"):
+                    primary = info
+                if primary.get("images"):
+                    break
+            if primary and primary.get("images"):
+                break
+
+        name = primary["name"]
+        version = primary["version"]
+        manifests = primary.get("manifests", [])
+        if not manifests:
+            raise FileNotFoundError(
+                f"No manifests listed for element '{name}' in {new_inventory_path}"
+            )
+        return str(elements_dir / name / version / "manifests" / manifests[0])
+
     inventory_path = output_dir / "inventory.json"
     if not inventory_path.exists():
         raise FileNotFoundError(f"No inventory.json found at {inventory_path}")

@@ -250,6 +250,7 @@ resources:
           GC_PG_DB={$dbaas.types.postgres.instances.$s3aas_cluster_pg.databases.$s3aas_db:name}
           GC_PG_ENDPOINTS={$dbaas.types.postgres.instances.$s3aas_cluster_pg:join(ipsv4)}
           GC_HS256_JWKS_ENCRYPTION_KEY={$s3aas.imports.$var_hs256_jwks_encryption_key:value}
+          AUDIENCE={$s3aas.imports.$var_iam_default_client_id:value}
           "
 
   # S3aaS
@@ -281,6 +282,10 @@ imports:
     element: "$core"
     kind: "resource"
     link: "$core.vs.variables.$hs256_jwks_encryption_key"
+  var_iam_default_client_id:
+    element: "$core"
+    kind: "resource"
+    link: "$core.vs.variables.$iam_default_client_id"
 
 exports:
   rustfs_1:
