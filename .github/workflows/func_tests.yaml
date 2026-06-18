@@ -82,13 +82,11 @@ jobs:
         run: |
           VM_IP=10.20.0.2
           # Get token
-          ADMIN_TOKEN=$(curl --location "http://$VM_IP:11010/v1/iam/clients/00000000-0000-0000-0000-000000000000/actions/get_token/invoke" \
+          ADMIN_TOKEN=$(curl --location "http://$VM_IP:80/api/core/v1/iam/clients/default/actions/get_token/invoke" \
               --header 'Content-Type: application/x-www-form-urlencoded' \
               --data-urlencode 'grant_type=password' \
               --data-urlencode 'username=admin' \
               --data-urlencode "password=${ADMIN_PASSWORD}" \
-              --data-urlencode 'client_id=GenesisCoreClientId' \
-              --data-urlencode 'client_secret=GenesisCoreSecret' \
               --data-urlencode 'scope=openid' \
               --data-urlencode 'ttl=3600' | jq .access_token -r)
           echo "ADMIN_TOKEN=$ADMIN_TOKEN" >> $GITHUB_ENV

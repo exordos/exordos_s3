@@ -33,6 +33,7 @@ export IAM_USER_NAME="${IAM_USER_NAME:-exordos_s3}"
 export IAM_USER_PASS="${IAM_USER_PASS:-exordos_s3}"
 export PROJECT_ID="${PROJECT_ID}"
 export GC_HS256_JWKS_ENCRYPTION_KEY="${GC_HS256_JWKS_ENCRYPTION_KEY:-}"
+export AUDIENCE="${AUDIENCE:-}"
 
 export GC_PG_USER="${GC_PG_USER:-exordos_s3}"
 export GC_PG_PASS="${GC_PG_PASS:-exordos_s3}"
