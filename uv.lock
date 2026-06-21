@@ -626,8 +626,8 @@ wheels = [
 
 [[package]]
 name = "exordos-metapaas"
-version = "0.0.10"
-source = { registry = "http://10.20.0.1:8080/simple/" }
+version = "0.0.3"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bjoern" },
     { name = "gcl-iam" },
@@ -638,8 +638,9 @@ dependencies = [
     { name = "requests" },
     { name = "restalchemy" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/02/4d/a5426d579e59e855273ce5abf6a7981238aa0656016518f0a2108ff6974a/exordos_metapaas-0.0.3.tar.gz", hash = "sha256:676e6c73f093453676d001a24dedb92a32e548ff780dfd9e5ab2298b5d026bce", size = 168762, upload-time = "2026-06-19T20:19:21.874Z" }
 wheels = [
-    { url = "http://10.20.0.1:8080/simple/exordos_metapaas-0.0.10-py3-none-any.whl" },
+    { url = "https://files.pythonhosted.org/packages/a1/b8/c05f659dd346b12c217cd076d22c36b993cec3000e46580a98d837b4c018/exordos_metapaas-0.0.3-py3-none-any.whl", hash = "sha256:3faae4cc72f6ec154752cccfc525e93fe0d05d7f5dc390e192e4d8984dbb2bcc", size = 50815, upload-time = "2026-06-19T20:19:20.431Z" },
 ]
 
 [[package]]
@@ -682,7 +683,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'test'", specifier = ">=1.26.0,<2.0.0" },
     { name = "coverage", marker = "extra == 'test'", specifier = ">=4.0" },
     { name = "exordos", marker = "extra == 'test'", specifier = ">=2.0.0,<3.0.0" },
-    { name = "exordos-metapaas", specifier = ">=0.0.5" },
+    { name = "exordos-metapaas", specifier = ">=0.0.3,<1.0.0" },
     { name = "gcl-iam", specifier = ">=1.0.3,<2.0.0" },
     { name = "gcl-looper", specifier = ">=1.2.3,<2.0.0" },
     { name = "gcl-sdk", specifier = ">=3.0.0,<4.0.0" },
@@ -742,7 +743,7 @@ wheels = [
 
 [[package]]
 name = "gcl-sdk"
-version = "3.0.3"
+version = "3.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bjoern" },
@@ -756,9 +757,9 @@ dependencies = [
     { name = "restalchemy" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/27/a8/cd5ede01e8521209de47baeb7ae4dca75e1d0da501be39ca63f71a3870e2/gcl_sdk-3.0.3.tar.gz", hash = "sha256:88796d9e1794cea4abb884459cbcf883d5e43ce3ef989c37405e6339b36b4c12", size = 282772, upload-time = "2026-06-05T16:37:24.486Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/69/636c5fbf7af9bb847e9fe38035203e3506e7e64263b50e929af777896ccc/gcl_sdk-3.0.5.tar.gz", hash = "sha256:77f10b519fff5c091ade03ddca93f31106d58c9ab83abd1484a323925a0983eb", size = 284527, upload-time = "2026-06-11T17:01:49.486Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/66/c0b7bb1b3fab4356209d4b7fd4be187b685abfe16ea8aaee29a405b8bf78/gcl_sdk-3.0.3-py3-none-any.whl", hash = "sha256:9a92c1fbc228af61ff00183c9fa7bea984ce357d5a1d708f39694fdbb17fb176", size = 211870, upload-time = "2026-06-05T16:37:22.615Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/a2/341fab9f7f922d4b47b0cc7420c89a18d0361646de755b7d5bc50a44261b/gcl_sdk-3.0.5-py3-none-any.whl", hash = "sha256:091600d8ed29fdcc36e6cc53d772c91dca7eecb25a59b66190414996d43ee4e5", size = 215879, upload-time = "2026-06-11T17:01:47.945Z" },
 ]
 
 [[package]]

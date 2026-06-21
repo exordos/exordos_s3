@@ -83,8 +83,11 @@ jobs:
 
       - name: Set hypervisor with overbooking
         run: |
-          HYPER_UUID="$(exordos c h l -o json | jq -r .[0]."UUID")"
+          HYPER_UUID="$(exordos c h l -o json | jq -r .[0]."uuid")"
           exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
+
+      - name: Install requirements
+        run: sudo apt update && sudo apt install --yes libev-dev
 
       - name: Build + serve + install (prepare_env.py)
         run: |

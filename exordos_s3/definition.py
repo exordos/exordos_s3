@@ -15,6 +15,7 @@
 import os
 
 from exordos_metapaas.registry import PaaSDefinition
+
 from exordos_s3.controlplane.api import routes
 
 
@@ -34,10 +35,12 @@ class S3Definition(PaaSDefinition):
         return os.path.join(os.path.dirname(__file__), "migrations")
 
     def get_builders(self, core_username, core_password, core_api_base_url, project_id):
+        from exordos_s3.controlplane.infra.dm.models import (
+            S3Instance as InfraS3Instance,
+        )
         from exordos_s3.controlplane.infra.services.builder import CoreInfraBuilder
-        from exordos_s3.controlplane.infra.dm.models import S3Instance as InfraS3Instance
-        from exordos_s3.controlplane.paas.services.builder import S3InstanceBuilder
         from exordos_s3.controlplane.paas.dm.models import S3Instance as PaaSS3Instance
+        from exordos_s3.controlplane.paas.services.builder import S3InstanceBuilder
 
         return [
             CoreInfraBuilder(

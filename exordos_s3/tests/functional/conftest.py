@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import os
 import time
-import typing as tp
 import uuid as sys_uuid
 
 import boto3
 import botocore.config
 import botocore.exceptions
 import pytest
+from exordos.clients import base_client
 from gcl_iam.tests.functional import clients as iam_clients
 from gcl_sdk.clients.http import base as http_client
-
-from exordos.clients import base_client
-
 
 # --- Environment configuration ---
 
@@ -115,7 +112,9 @@ def s3_cp_ip(core_client) -> str:
         all_nodes = core_client.filter(NODE_COLLECTION)
         nodes = [n for n in all_nodes if "metapaas" in n.get("name", "").lower()]
     if not nodes:
-        pytest.skip("No metapaas-cp compute node found — is metapaas element installed?")
+        pytest.skip(
+            "No metapaas-cp compute node found — is metapaas element installed?"
+        )
     node = nodes[0]
     net = node.get("default_network", {})
     ip = net.get("ipv4")
@@ -417,7 +416,9 @@ def _generate_test_secret_key() -> str:
     return "x" * 64
 
 
-def _wait_for_access_key_sync(s3_endpoint, access_key, secret_key, timeout=120, interval=3):
+def _wait_for_access_key_sync(
+    s3_endpoint, access_key, secret_key, timeout=120, interval=3
+):
     client = boto3.client(
         "s3",
         endpoint_url=f"http://{s3_endpoint}",
@@ -436,7 +437,13 @@ def _wait_for_access_key_sync(s3_endpoint, access_key, secret_key, timeout=120, 
             return
         except botocore.exceptions.ClientError as e:
             code = e.response.get("Error", {}).get("Code", "")
-            if code in ("InvalidAccessKeyId", "SignatureDoesNotMatch", "AccessDenied", "AllAccessDisabled", ""):
+            if code in (
+                "InvalidAccessKeyId",
+                "SignatureDoesNotMatch",
+                "AccessDenied",
+                "AllAccessDisabled",
+                "",
+            ):
                 time.sleep(interval)
                 continue
             raise
@@ -446,7 +453,9 @@ def _wait_for_access_key_sync(s3_endpoint, access_key, secret_key, timeout=120, 
     raise TimeoutError(f"Access key {access_key} not synced within {timeout}s")
 
 
-def _wait_for_bucket_sync(s3_endpoint, bucket_name, access_key, secret_key, timeout=60, interval=2):
+def _wait_for_bucket_sync(
+    s3_endpoint, bucket_name, access_key, secret_key, timeout=60, interval=2
+):
     client = boto3.client(
         "s3",
         endpoint_url=f"http://{s3_endpoint}",
@@ -489,9 +498,16 @@ def make_s3_client(s3_endpoint, access_key, secret_key):
     )
 
 
-def create_bucket_via_api(s3_api_client, instance_uuid, name, project_id, s3_endpoint, **kwargs):
+def create_bucket_via_api(
+    s3_api_client, instance_uuid, name, project_id, s3_endpoint, **kwargs
+):
     collection = f"{S3_INSTANCES}{instance_uuid}/buckets/"
-    data = {"name": name, "project_id": project_id, "instance": f"{S3_INSTANCES}{instance_uuid}", **kwargs}
+    data = {
+        "name": name,
+        "project_id": project_id,
+        "instance": f"{S3_INSTANCES}{instance_uuid}",
+        **kwargs,
+    }
     result = s3_api_client.create(collection, data=data)
     time.sleep(10)
     return result
@@ -499,17 +515,31 @@ def create_bucket_via_api(s3_api_client, instance_uuid, name, project_id, s3_end
 
 def create_user_via_api(s3_api_client, instance_uuid, name, project_id):
     collection = f"{S3_INSTANCES}{instance_uuid}/users/"
-    data = {"name": name, "project_id": project_id, "instance": f"{S3_INSTANCES}{instance_uuid}"}
+    data = {
+        "name": name,
+        "project_id": project_id,
+        "instance": f"{S3_INSTANCES}{instance_uuid}",
+    }
     return s3_api_client.create(collection, data=data)
 
 
-def create_policy_via_api(s3_api_client, instance_uuid, name, content, project_id, **kwargs):
+def create_policy_via_api(
+    s3_api_client, instance_uuid, name, content, project_id, **kwargs
+):
     collection = f"{S3_INSTANCES}{instance_uuid}/policies/"
-    data = {"name": name, "project_id": project_id, "instance": f"{S3_INSTANCES}{instance_uuid}", "content": content, **kwargs}
+    data = {
+        "name": name,
+        "project_id": project_id,
+        "instance": f"{S3_INSTANCES}{instance_uuid}",
+        "content": content,
+        **kwargs,
+    }
     return s3_api_client.create(collection, data=data)
 
 
-def attach_policy_via_api(s3_api_client, instance_uuid, user_uuid, policy_uuid, project_id):
+def attach_policy_via_api(
+    s3_api_client, instance_uuid, user_uuid, policy_uuid, project_id
+):
     collection = f"{S3_INSTANCES}{instance_uuid}/users/{user_uuid}/policies/"
     data = {
         "project_id": project_id,
@@ -520,7 +550,9 @@ def attach_policy_via_api(s3_api_client, instance_uuid, user_uuid, policy_uuid, 
     return s3_api_client.create(collection, data=data)
 
 
-def create_access_key_via_api(s3_api_client, instance_uuid, user_uuid, project_id, s3_endpoint):
+def create_access_key_via_api(
+    s3_api_client, instance_uuid, user_uuid, project_id, s3_endpoint
+):
     collection = f"{S3_INSTANCES}{instance_uuid}/users/{user_uuid}/keys/"
     secret_key = _generate_test_secret_key()
     data = {
@@ -532,7 +564,9 @@ def create_access_key_via_api(s3_api_client, instance_uuid, user_uuid, project_i
     result = s3_api_client.create(collection, data=data)
     result["secret_key"] = result.get("secret_key", secret_key)
     try:
-        _wait_for_access_key_sync(s3_endpoint, result["access_key"], result["secret_key"])
+        _wait_for_access_key_sync(
+            s3_endpoint, result["access_key"], result["secret_key"]
+        )
     except TimeoutError:
         time.sleep(10)
     return result
