@@ -9,7 +9,6 @@ import botocore.config
 import botocore.exceptions
 import pytest
 from exordos.clients import base_client
-from gcl_iam.tests.functional import clients as iam_clients
 from gcl_sdk.clients.http import base as http_client
 
 # --- Environment configuration ---
@@ -44,9 +43,9 @@ S3_VERSIONS = "/v1/types/s3/versions/"
 NODE_COLLECTION = "/v1/compute/nodes/"
 
 OWNER_ROLE_UUID = "726f6c65-0000-0000-0000-000000000002"
-DEFAULT_CLIENT_UUID = "00000000-0000-0000-0000-000000000000"
-DEFAULT_CLIENT_ID = "GenesisCoreClientId"
-DEFAULT_CLIENT_SECRET = "GenesisCoreSecret"
+
+IAM_USERS = "/v1/iam/users/"
+IAM_ROLE_BINDINGS = "/v1/iam/role_bindings/"
 
 
 # --- Auth helpers ---
@@ -58,6 +57,8 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
         scope = http_client.CoreIamAuthenticator.project_scope(
             sys_uuid.UUID(project_id)
         )
+    # Omit client_uuid so CoreIamAuthenticator uses its "default" alias and
+    # does not send client_id/client_secret — avoids 401 on freshly-bootstrapped cores.
     return dict(
         endpoint=endpoint or EXORDOS_ENDPOINT,
         username=EXORDOS_USERNAME,
@@ -65,9 +66,6 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
         access_token=None,
         refresh_token=None,
         scope=scope,
-        client_uuid=DEFAULT_CLIENT_UUID,
-        client_id=DEFAULT_CLIENT_ID,
-        client_secret=DEFAULT_CLIENT_SECRET,
     )
 
 
@@ -77,19 +75,6 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
 @pytest.fixture(scope="session")
 def core_client() -> http_client.CollectionBaseClient:
     return base_client.get_user_api_client(_get_auth_data())
-
-
-@pytest.fixture(scope="session")
-def iam_rest_client() -> iam_clients.GenericAutoRefreshRESTClient:
-    auth = iam_clients.GenesisCoreAuth(
-        username=EXORDOS_USERNAME,
-        password=EXORDOS_PASSWORD,
-        client_uuid=DEFAULT_CLIENT_UUID,
-        client_id=DEFAULT_CLIENT_ID,
-        client_secret=DEFAULT_CLIENT_SECRET,
-    )
-    endpoint = f"{EXORDOS_ENDPOINT.rstrip('/')}/v1/"
-    return iam_clients.GenericAutoRefreshRESTClient(endpoint, auth)
 
 
 # --- Metapaas CP node resolution ---
@@ -149,26 +134,29 @@ def metapaas_admin_client(s3_cp_ip) -> http_client.CollectionBaseClient:
 
 
 @pytest.fixture(scope="session")
-def test_user(iam_rest_client) -> dict:
+def test_user(core_client) -> dict:
     test_password = f"S3test{sys_uuid.uuid4().hex[:12]}"
     user_name = f"s3-test-{sys_uuid.uuid4().hex[:8]}"
-    user = iam_rest_client.create_user(
-        username=user_name,
-        password=test_password,
-        first_name="S3",
-        last_name="Tester",
-        email=f"noreply+{user_name}@genesis-core.tech",
+    user = core_client.create(
+        IAM_USERS,
+        data={
+            "username": user_name,
+            "password": test_password,
+            "first_name": "S3",
+            "last_name": "Tester",
+            "email": f"noreply+{user_name}@genesis-core.tech",
+        },
     )
     user["password"] = test_password
     yield user
     try:
-        iam_rest_client.delete_user(user["uuid"])
+        core_client.delete(IAM_USERS, uuid=user["uuid"])
     except Exception:
         pass
 
 
 @pytest.fixture(scope="session")
-def test_user_project(iam_rest_client, test_user) -> dict:
+def test_user_project(core_client, test_user) -> dict:
     """Grant the test user owner role in the metapaas project.
 
     S3 IAM permissions (s3_instance.create, bucket.*, etc.) are bound to the
@@ -176,11 +164,21 @@ def test_user_project(iam_rest_client, test_user) -> dict:
     require re-creating all those bindings; it's simpler to give the test user
     an owner role in the metapaas project for the duration of the test session.
     """
-    iam_rest_client.create_or_get_role_binding(
-        role_uuid=OWNER_ROLE_UUID,
-        user_uuid=test_user["uuid"],
-        project_id=METAPAAS_PROJECT_ID,
+    existing = core_client.filter(
+        IAM_ROLE_BINDINGS,
+        role=OWNER_ROLE_UUID,
+        user=test_user["uuid"],
+        project=METAPAAS_PROJECT_ID,
     )
+    if not existing:
+        core_client.create(
+            IAM_ROLE_BINDINGS,
+            data={
+                "role": f"/v1/iam/roles/{OWNER_ROLE_UUID}",
+                "user": f"/v1/iam/users/{test_user['uuid']}",
+                "project": f"/v1/iam/projects/{METAPAAS_PROJECT_ID}",
+            },
+        )
     yield {"uuid": METAPAAS_PROJECT_ID}
     # Role binding cleanup is handled by user deletion in test_user teardown.
 

@@ -11,7 +11,7 @@ env:
   CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
   CORE_USERNAME: "admin"
   CORE_PASSWORD: "admin"
-  ELEMENT_NAME: s3aas
+  NGINX_URL: "http://10.20.0.1:8081"
 
 jobs:
   Build:
@@ -46,21 +46,14 @@ jobs:
           uv tool install tox --with tox-uv
           pip install build
 
-      - name: Build and push exordos_s3
+      - name: Build exordos_s3
         timeout-minutes: 20
-        env:
-          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
         run: |
           set -eux
-
-          VERSION="$(exordos get-version .)"
-
-          exordos build $(pwd)
-
-          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
-          exordos push -c exordos/exordos.push.yaml -t exordos_repo -f --latest
-
+          exordos build --output-dir /tmp/s3aas-build $(pwd)
+          VERSION="$(jq -r '.version' /tmp/s3aas-build/exordos-elements/s3aas/*/inventory.json | head -1)"
           echo "S3AAS_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "S3AAS_BUILD_DIR=/tmp/s3aas-build" >> $GITHUB_ENV
 
       - name: Configure exordos settings
         run: |
@@ -87,19 +80,47 @@ jobs:
           exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
 
       - name: Install requirements
-        run: sudo apt update && sudo apt install --yes libev-dev
+        run: sudo apt update && sudo apt install --yes libev-dev nginx
 
-      - name: Build + serve + install (prepare_env.py)
+      - name: Setup nginx
         run: |
-          tox -e develop
+          sudo tee /etc/nginx/sites-available/s3aas-ci > /dev/null <<'EOF'
+          server {
+              listen 8081;
+              root /srv/nginx;
+              autoindex on;
+          }
+          EOF
+          sudo ln -sf /etc/nginx/sites-available/s3aas-ci /etc/nginx/sites-enabled/s3aas-ci
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo mkdir -p /srv/nginx
+          sudo chown -R "$USER:$USER" /srv/nginx
+          sudo systemctl enable --now nginx
 
-          .tox/develop/bin/python \
-            exordos_s3/tests/functional/prepare_env.py \
-            --project-dir . \
+      - name: Populate nginx + build wheel
+        run: |
+          cp -r "$S3AAS_BUILD_DIR/." /srv/nginx/
+          mkdir -p /srv/nginx/simple
+          python -m build --wheel --outdir /srv/nginx/simple/
+
+      - name: Patch manifest for CI
+        run: |
+          MF=/srv/nginx/exordos-elements/s3aas/$S3AAS_VERSION/manifests/s3aas.yaml
+          sed -i 's|index_url: ""|index_url: "'"$NGINX_URL"'/simple/"|' "$MF"
+          sed -i 's|image: "https://repo.exordos.com/exordos-elements/|image: "'"$NGINX_URL"'/exordos-elements/|' "$MF"
+          grep -E 'index_url|image:' "$MF"
+
+      - name: Install elements + wait
+        run: |
+          python exordos_s3/tests/functional/prepare_env.py \
+            --skip-build \
+            --no-http-server \
+            --repository "$NGINX_URL/exordos-elements" \
+            --s3aas-version "$S3AAS_VERSION" \
             --output-dir /tmp/metapaas-s3-build \
             --endpoint $CORE_ENDPOINT_URL \
             --username $CORE_USERNAME \
-            --password "${CORE_PASSWORD}" \
+            --password "$CORE_PASSWORD" \
             --wait-timeout 600 \
             2>&1 | tee /tmp/prepare_env.log
 
@@ -107,18 +128,24 @@ jobs:
 
       - name: Wait for S3 API
         run: |
-          CP_URL=$(grep "EXORDOS_S3_CP_URL" $GITHUB_ENV | cut -d= -f2)
           for i in {1..30}; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CP_URL}/v1/")
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${EXORDOS_S3_CP_URL}/v1/" || true)
             if echo "$CODE" | grep -qE "200|404"; then
               echo "MetaPaaS user-api ready (HTTP $CODE)"; exit 0
             fi
-            echo "Waiting ($i/30) for user-api…"; sleep 10
+            echo "Waiting ($i/30) for user-api… (got '$CODE')"; sleep 10
           done
           exit 1
 
       - name: Run functional tests
         run: tox -e ${{ env.PYTHON_VERSION }}-functional
+
+      - name: Push exordos_s3
+        env:
+          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
+        run: |
+          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
+          exordos push -c exordos/exordos.push.yaml -e $S3AAS_BUILD_DIR -t exordos_repo -f --latest
 
       - name: Debug session on failure
         uses: owenthereal/action-upterm@v1

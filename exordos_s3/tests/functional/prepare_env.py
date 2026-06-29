@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import shutil
 import signal
 import socket
@@ -270,22 +271,31 @@ def _wait_for_node(
     """Wait for a compute node matching name_pattern to be ACTIVE; return its IP."""
     _log(f"Waiting for node matching '{name_pattern}' to be ACTIVE…")
     deadline = time.monotonic() + timeout
+    last_raw = ""
     while time.monotonic() < deadline:
         result = subprocess.run(
-            ["exordos", "-e", endpoint, "-u", username, "-p", password, "cn", "list"],
+            ["exordos", "-e", endpoint, "-u", username, "-p", password, "cn", "list", "-o", "json"],
             capture_output=True,
             text=True,
         )
-        for line in result.stdout.splitlines():
-            if name_pattern in line and "ACTIVE" in line:
-                import re
-
-                m = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", line)
-                if m:
-                    ip = m.group(1)
-                    _log(f"Node '{name_pattern}' ACTIVE at {ip}")
-                    return ip
+        last_raw = result.stdout
+        try:
+            nodes = json.loads(result.stdout)
+        except Exception:
+            time.sleep(15)
+            continue
+        for node in nodes if isinstance(nodes, list) else []:
+            name = str(node.get("name", ""))
+            status = str(node.get("status", ""))
+            if name_pattern in name and status == "ACTIVE":
+                for val in node.values():
+                    m = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", str(val))
+                    if m:
+                        ip = m.group(1)
+                        _log(f"Node '{name}' ACTIVE at {ip}")
+                        return ip
         time.sleep(15)
+    _log(f"Last cn list output:\n{last_raw}")
     raise TimeoutError(f"No ACTIVE node matching '{name_pattern}' within {timeout}s")
 
 
@@ -434,6 +444,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--cleanup", action="store_true", help="Stop the HTTP server and exit"
     )
+    p.add_argument(
+        "--repository",
+        default=None,
+        help="Element repository base URL (overrides the auto-detected HTTP server URL).",
+    )
+    p.add_argument(
+        "--index-url",
+        dest="index_url",
+        default=None,
+        help="pip index URL (overrides the auto-detected HTTP server URL).",
+    )
     p.add_argument("--pid-file", default=None)
     return p
 
@@ -473,8 +494,14 @@ def main(argv: list[str] | None = None) -> None:
     if not args.no_http_server:
         host = args.http_host or _get_default_ip()
         port = args.http_port
-        repository_url = f"http://{host}:{port}/exordos-elements"
+        repository_url = f"http://{host}:{port}"
         index_url = f"http://{host}:{port}/simple/"
+
+    # Explicit CLI overrides always win (used when nginx is managed externally).
+    if args.repository is not None:
+        repository_url = args.repository
+    if args.index_url is not None:
+        index_url = args.index_url
 
     metapaas_output = output_dir / "metapaas"
     s3aas_output = output_dir / "s3aas"
@@ -515,29 +542,36 @@ def main(argv: list[str] | None = None) -> None:
         wheel_path = _build_wheel(args.project_dir, str(wheel_output))
     else:
         _log("Step 2: Skipping build (--skip-build)")
-        wheels = list((wheel_output / "dist").glob("exordos_s3-*.whl"))
-        if not wheels:
-            raise FileNotFoundError("No wheel found; run without --skip-build first")
-        wheel_path = wheels[0]
+        wheel_path = None
 
     # ------------------------------------------------------------------
     # Step 3: Publish to serve directory + start HTTP server
     # ------------------------------------------------------------------
-    _log("Step 3: Publishing artifacts")
-    serve_root.mkdir(parents=True, exist_ok=True)
-    _publish_to_serve_dir(
-        serve_root,
-        metapaas_output if args.metapaas_dir is not None else None,
-        s3aas_output,
-        wheel_path,
-    )
-
     if not args.no_http_server:
+        if wheel_path is None:
+            # skip-build mode: locate a previously built wheel
+            wheels = list((wheel_output / "dist").glob("exordos_s3-*.whl"))
+            if not wheels:
+                raise FileNotFoundError(
+                    "No wheel found; run without --skip-build first"
+                )
+            wheel_path = wheels[0]
+
+        _log("Step 3: Publishing artifacts")
+        serve_root.mkdir(parents=True, exist_ok=True)
+        _publish_to_serve_dir(
+            serve_root,
+            metapaas_output if args.metapaas_dir is not None else None,
+            s3aas_output,
+            wheel_path,
+        )
         http_proc = _start_http_server(str(serve_root), port)
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         pid_file.write_text(str(http_proc.pid))
         _log(f"Repository URL: {repository_url}")
         _log(f"Index URL:      {index_url}")
+    else:
+        _log("Step 3: Skipping local HTTP server (--no-http-server)")
 
     if args.skip_install:
         _log("Step 4-6: Skipping install (--skip-install)")
@@ -605,13 +639,14 @@ def _print_summary(repository_url, index_url, args, cp_ip, metapaas_password) ->
     _log("=" * 60)
     _log("Environment ready! Suggested env vars for functional tests:")
     _log("")
-    _log(f"  export EXORDOS_ENDPOINT={args.endpoint}")
-    _log(f"  export EXORDOS_USERNAME={args.username}")
-    _log(f"  export EXORDOS_PASSWORD={args.password}")
-    _log(f"  export METAPAAS_USERNAME={METAPAAS_IAM_USER}")
-    _log(f"  export METAPAAS_PASSWORD={metapaas_password}")
-    _log(f"  export EXORDOS_S3_CP_URL=http://{cp_ip}:8080")
-    _log("  export EXORDOS_POLL_TIMEOUT=600")
+    # Print without the [prepare-env] prefix so these lines are grep-able by CI.
+    print(f"  export EXORDOS_ENDPOINT={args.endpoint}", flush=True)
+    print(f"  export EXORDOS_USERNAME={args.username}", flush=True)
+    print(f"  export EXORDOS_PASSWORD={args.password}", flush=True)
+    print(f"  export METAPAAS_USERNAME={METAPAAS_IAM_USER}", flush=True)
+    print(f"  export METAPAAS_PASSWORD={metapaas_password}", flush=True)
+    print(f"  export EXORDOS_S3_CP_URL=http://{cp_ip}:8080", flush=True)
+    print("  export EXORDOS_POLL_TIMEOUT=600", flush=True)
     _log("")
     _log("Then run:  tox -e py312-functional")
     _log("=" * 60)

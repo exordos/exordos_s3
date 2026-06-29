@@ -39,6 +39,7 @@ dev = [
     "pytest>=7.0.0",
 ]
 test = [
+    "build>=1.0.0",
     "coverage>=4.0",
     "mock>=3.0.5,<4.0.0",
     "pytest>=8.0.0,<9.0.0",
