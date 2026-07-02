@@ -156,12 +156,12 @@ resources:
 
   # s3 dataplane version catalog entry. Lives in the s3aas element namespace so
   # client manifests import it from $s3aas (same path as the standalone s3aas
-  # element, backward-compatible). `description` carries the metapaas project id
+  # element, backward-compatible). `description` carries the EM project id
   # for the core-agent version filter (em_s3aas_types_s3_versions).
   $s3aas.types.s3.versions:
     rustfs_1:
       name: "rustfs_1"
-      description: "4d657461-0000-0000-0000-000000000002"
+      description: "12345678-c625-4fee-81d5-f691897b8142"
       image: "{{ repository | default('https://repo.exordos.com/exordos-elements') }}/{{ name }}/{{ version }}/images/exordos-metapaas-s3-dp.raw.zst"
 
 exports:
