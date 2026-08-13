@@ -26,9 +26,6 @@ build:
     # Communal shared S3 instance for platform-wide use.
     - manifest: manifests/communal_s3.yaml.j2
 
-    # Example consumer element: declaratively creates an s3 instance + bucket.
-    - manifest: manifests/example_s3.yaml.j2
-
     # s3 dataplane image (launched per s3 instance by the infra builder)
     - manifest: manifests/s3aas.yaml.j2
       images:
