@@ -213,8 +213,7 @@ def _publish_to_serve_dir(
 
 def _ee_install(
     name: str,
-    version: str,
-    repository: str | None,
+    version: str | None,
     endpoint: str,
     username: str,
     password: str,
@@ -230,11 +229,9 @@ def _ee_install(
         "ee",
         "install",
         name,
-        "--version",
-        version,
     ]
-    if repository is not None:
-        cmd += ["--repository", repository]
+    if version is not None:
+        cmd += ["--version", version]
     _run(cmd)
 
 
@@ -584,8 +581,7 @@ def main(argv: list[str] | None = None) -> None:
     _log("Step 4: Installing metapaas element")
     _ee_install(
         "metapaas",
-        args.metapaas_version,
-        repository_url if args.metapaas_dir is not None else None,
+        None,
         args.endpoint,
         args.username,
         args.password,
@@ -607,7 +603,6 @@ def main(argv: list[str] | None = None) -> None:
     _ee_install(
         "s3aas",
         args.s3aas_version,
-        repository_url,
         args.endpoint,
         args.username,
         args.password,

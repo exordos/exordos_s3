@@ -55,6 +55,13 @@ jobs:
           echo "S3AAS_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "S3AAS_BUILD_DIR=/tmp/s3aas-build" >> $GITHUB_ENV
 
+      - name: Push exordos_s3
+        env:
+          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
+        run: |
+          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
+          exordos push -c exordos/exordos.push.yaml -e $S3AAS_BUILD_DIR -t exordos_repo -f --latest
+
       - name: Configure exordos settings
         run: |
           exordos settings set-realm default --endpoint $CORE_ENDPOINT_URL
@@ -139,13 +146,6 @@ jobs:
 
       - name: Run functional tests
         run: tox -e ${{ env.PYTHON_VERSION }}-functional
-
-      - name: Push exordos_s3
-        env:
-          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
-        run: |
-          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
-          exordos push -c exordos/exordos.push.yaml -e $S3AAS_BUILD_DIR -t exordos_repo -f --latest
 
       - name: Debug session on failure
         uses: owenthereal/action-upterm@v1
