@@ -22,7 +22,6 @@ import logging
 import os
 import urllib.parse
 
-import requests
 from gcl_sdk.agents.universal import constants as c
 from gcl_sdk.agents.universal.drivers import meta
 from gcl_sdk.infra import constants as pc
@@ -33,6 +32,7 @@ from minio import objectlockconfig as minio_olc
 from minio import retention as minio_retention
 from minio import signer as minio_signer
 from minio import versioningconfig as minio_vc
+import requests
 from restalchemy.common import singletons
 from restalchemy.dm import properties
 from restalchemy.dm import types as ra_types

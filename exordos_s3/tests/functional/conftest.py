@@ -7,9 +7,9 @@ import uuid as sys_uuid
 import boto3
 import botocore.config
 import botocore.exceptions
-import pytest
 from exordos.clients import base_client
 from gcl_sdk.clients.http import base as http_client
+import pytest
 
 # --- Environment configuration ---
 

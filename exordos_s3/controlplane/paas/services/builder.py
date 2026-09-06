@@ -55,7 +55,7 @@ class PaaSBuilder(builder.PaaSBuilder):
 class S3InstanceBuilder(PaaSBuilder):
     def __init__(
         self,
-        instance_model: tp.Type[models.S3Instance] = models.S3Instance,
+        instance_model: type[models.S3Instance] = models.S3Instance,
     ):
         super().__init__(instance_model)
 
