@@ -42,13 +42,21 @@ from exordos_s3 import constants
 
 LOG = logging.getLogger(__name__)
 
+# Built-in policies shipped by RustFS.  They are not instance state and the
+# server refuses to delete them, so they are filtered out of the actual state.
 SYSTEM_POLICIES = {
+    "KMSAuditor",
+    "KMSKeyAdministrator",
+    "KMSKeyUser",
     "consoleAdmin",
     "diagnostics",
     "readonly",
     "readwrite",
     "writeonly",
 }
+
+# Message RustFS returns when a delete targets a built-in policy.
+SYSTEM_POLICY_DELETE_ERROR = "system policy can not be deleted"
 
 
 def _normalize_actual_policy(policy):
@@ -496,6 +504,15 @@ class AdminClient(singletons.InheritSingleton):
             encoded_name = urllib.parse.quote(name, safe="-._~")
             self._admin_request("DELETE", f"/remove-canned-policy?name={encoded_name}")
             LOG.info("Policy %s removed", name)
+        except requests.HTTPError as e:
+            # RustFS may ship built-in policies not listed in SYSTEM_POLICIES.
+            # Those are not ours to delete, so do not report them as failures
+            # on every reconciliation cycle.
+            body = e.response.text if e.response is not None else ""
+            if SYSTEM_POLICY_DELETE_ERROR in body:
+                LOG.debug("Policy %s is a system policy, not removed", name)
+            else:
+                LOG.warning("Failed to remove policy %s", name, exc_info=True)
         except Exception:
             LOG.warning("Failed to remove policy %s", name, exc_info=True)
 
