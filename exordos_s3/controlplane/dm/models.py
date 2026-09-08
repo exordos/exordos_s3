@@ -44,9 +44,9 @@ ROOT_SECRET_ALPHABET = string.ascii_letters + string.digits + "!@#$%^&*"
 # reconciliation of the whole instance.
 #
 # Only the rules every S3 implementation enforces are checked.  The type also
-# runs when a row is read back, so anything it rejects has to be cleaned out of
-# the table by migration 0001; keeping the check to what the dataplane itself
-# refuses means such a row can never have had a bucket behind it.
+# runs when a row is read back, and real installations hold no bucket rows that
+# fail it -- keeping the check to what the dataplane itself refuses means such
+# a row could never have had a bucket behind it in the first place.
 BUCKET_NAME_MIN_LENGTH = 3
 BUCKET_NAME_MAX_LENGTH = 63
 
