@@ -35,10 +35,16 @@ def _http_error(status_code: int, text: str) -> requests.HTTPError:
     return requests.HTTPError(f"{status_code} Server Error", response=response)
 
 
-SYSTEM_POLICY_ERROR = _http_error(
+SYSTEM_POLICY_IN_BODY = _http_error(
     500,
     "<Error><Code>InternalError</Code><Message>io error: "
     f"{driver.SYSTEM_POLICY_DELETE_ERROR}</Message></Error>",
+)
+
+# The same refusal as RustFS could word it: carried by the status line, with
+# nothing in the body to go on.
+SYSTEM_POLICY_IN_MESSAGE = requests.HTTPError(
+    f"500 Server Error: io error: {driver.SYSTEM_POLICY_DELETE_ERROR} for url: /x"
 )
 
 
@@ -51,14 +57,13 @@ class TestRemovePolicy:
             "DELETE", "/remove-canned-policy?name=my%20policy"
         )
 
+    @pytest.mark.parametrize("error", [SYSTEM_POLICY_IN_BODY, SYSTEM_POLICY_IN_MESSAGE])
     def test_system_policy_refusal_is_not_a_warning(
-        self, caplog: pytest.LogCaptureFixture
+        self, caplog: pytest.LogCaptureFixture, error: requests.HTTPError
     ) -> None:
         with (
             caplog.at_level(logging.DEBUG, logger=driver.LOG.name),
-            mock.patch.object(
-                driver.AdminClient, "_admin_request", side_effect=SYSTEM_POLICY_ERROR
-            ),
+            mock.patch.object(driver.AdminClient, "_admin_request", side_effect=error),
         ):
             _admin_client().remove_policy("KMSAuditor")
 

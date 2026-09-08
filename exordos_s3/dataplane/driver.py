@@ -508,8 +508,8 @@ class AdminClient(singletons.InheritSingleton):
             # RustFS may ship built-in policies not listed in SYSTEM_POLICIES.
             # Those are not ours to delete, so do not report them as failures
             # on every reconciliation cycle.
-            body = e.response.text if e.response is not None else ""
-            if SYSTEM_POLICY_DELETE_ERROR in body:
+            detail = f"{e} {e.response.text if e.response is not None else ''}"
+            if SYSTEM_POLICY_DELETE_ERROR in detail:
                 LOG.debug("Policy %s is a system policy, not removed", name)
             else:
                 LOG.warning("Failed to remove policy %s", name, exc_info=True)
