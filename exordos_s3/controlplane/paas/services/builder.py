@@ -55,7 +55,7 @@ class PaaSBuilder(builder.PaaSBuilder):
 class S3InstanceBuilder(PaaSBuilder):
     def __init__(
         self,
-        instance_model: tp.Type[models.S3Instance] = models.S3Instance,
+        instance_model: type[models.S3Instance] = models.S3Instance,
     ):
         super().__init__(instance_model)
 
@@ -113,7 +113,7 @@ class S3InstanceBuilder(PaaSBuilder):
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
         """Create a list of PaaS objects."""
         return self.actualize_paas_objects(
-            instance, builder.PaaSCollection(paas_objects=tuple())
+            instance, builder.PaaSCollection(paas_objects=())
         )
 
     def actualize_paas_objects(

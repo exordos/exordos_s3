@@ -93,16 +93,16 @@ Wait for `status` to become `ACTIVE`, then access via boto3:
 import boto3
 
 s3 = boto3.client(
-    's3',
-    endpoint_url='http://10.20.0.21:9000',
-    aws_access_key_id='<access-key>',
-    aws_secret_access_key='<secret-key>',
-    region_name='us-east-1'
+    "s3",
+    endpoint_url="http://10.20.0.21:9000",
+    aws_access_key_id="<access-key>",
+    aws_secret_access_key="<secret-key>",
+    region_name="us-east-1",
 )
 
-s3.put_object(Bucket='data-bucket', Key='test.txt', Body=b'hello')
-obj = s3.get_object(Bucket='data-bucket', Key='test.txt')
-print(obj['Body'].read())  # b'hello'
+s3.put_object(Bucket="data-bucket", Key="test.txt", Body=b"hello")
+obj = s3.get_object(Bucket="data-bucket", Key="test.txt")
+print(obj["Body"].read())  # b'hello'
 ```
 
 ## API Reference

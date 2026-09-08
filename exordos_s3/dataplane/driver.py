@@ -20,9 +20,9 @@ import hashlib
 import json
 import logging
 import os
+import typing as tp
 import urllib.parse
 
-import requests
 from gcl_sdk.agents.universal import constants as c
 from gcl_sdk.agents.universal.drivers import meta
 from gcl_sdk.infra import constants as pc
@@ -33,6 +33,7 @@ from minio import objectlockconfig as minio_olc
 from minio import retention as minio_retention
 from minio import signer as minio_signer
 from minio import versioningconfig as minio_vc
+import requests
 from restalchemy.common import singletons
 from restalchemy.dm import properties
 from restalchemy.dm import types as ra_types
@@ -369,7 +370,7 @@ class AdminClient(singletons.InheritSingleton):
                 }
             return result
         except Exception:
-            LOG.error("Failed to list users via admin API", exc_info=True)
+            LOG.exception("Failed to list users via admin API")
             raise
 
     def add_user(self, access_key, secret_key):
@@ -382,7 +383,7 @@ class AdminClient(singletons.InheritSingleton):
             )
             LOG.info("User %s created", access_key)
         except Exception:
-            LOG.error("Failed to create user %s", access_key, exc_info=True)
+            LOG.exception("Failed to create user %s", access_key)
             raise
 
     def remove_user(self, access_key):
@@ -409,7 +410,7 @@ class AdminClient(singletons.InheritSingleton):
             )
             LOG.info("User %s policies set to %s", access_key, ", ".join(policy_names))
         except Exception:
-            LOG.error("Failed to set policies for user %s", access_key, exc_info=True)
+            LOG.exception("Failed to set policies for user %s", access_key)
             raise
 
     # -- Bucket quota operations (admin API) --
@@ -428,7 +429,7 @@ class AdminClient(singletons.InheritSingleton):
             )
             LOG.info("Bucket %s quota set to %d bytes", bucket_name, quota_bytes)
         except Exception:
-            LOG.error("Failed to set quota for bucket %s", bucket_name, exc_info=True)
+            LOG.exception("Failed to set quota for bucket %s", bucket_name)
             raise
 
     def get_bucket_quota(self, bucket_name):
@@ -471,7 +472,7 @@ class AdminClient(singletons.InheritSingleton):
                 if name not in SYSTEM_POLICIES
             }
         except Exception:
-            LOG.error("Failed to list policies via admin API", exc_info=True)
+            LOG.exception("Failed to list policies via admin API")
             raise
 
     def add_policy(self, name, content):
@@ -487,7 +488,7 @@ class AdminClient(singletons.InheritSingleton):
             )
             LOG.info("Policy %s created/updated", name)
         except Exception:
-            LOG.error("Failed to create policy %s", name, exc_info=True)
+            LOG.exception("Failed to create policy %s", name)
             raise
 
     def remove_policy(self, name):
@@ -519,7 +520,7 @@ class S3Instance(meta.MetaDataPlaneModel):
         default=pc.InstanceStatus.ACTIVE.value,
     )
 
-    _meta_fields = {"uuid", "name"}
+    _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -710,7 +711,7 @@ class S3CapabilityDriver(meta.MetaFileStorageAgentDriver):
 
     S3_META_PATH = os.path.join(c.WORK_DIR, "s3_meta.json")
 
-    __model_map__ = {
+    __model_map__: tp.ClassVar[dict[str, type]] = {
         "s3_instance_node": S3Instance,
     }
 
