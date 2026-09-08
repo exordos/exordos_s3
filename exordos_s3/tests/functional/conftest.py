@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 import uuid as sys_uuid
@@ -10,6 +11,8 @@ import botocore.exceptions
 from exordos.clients import base_client
 from gcl_sdk.clients.http import base as http_client
 import pytest
+
+LOG = logging.getLogger(__name__)
 
 # --- Environment configuration ---
 
@@ -59,14 +62,14 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
         )
     # Omit client_uuid so CoreIamAuthenticator uses its "default" alias and
     # does not send client_id/client_secret — avoids 401 on freshly-bootstrapped cores.
-    return dict(
-        endpoint=endpoint or EXORDOS_ENDPOINT,
-        username=EXORDOS_USERNAME,
-        password=EXORDOS_PASSWORD,
-        access_token=None,
-        refresh_token=None,
-        scope=scope,
-    )
+    return {
+        "endpoint": endpoint or EXORDOS_ENDPOINT,
+        "username": EXORDOS_USERNAME,
+        "password": EXORDOS_PASSWORD,
+        "access_token": None,
+        "refresh_token": None,
+        "scope": scope,
+    }
 
 
 # --- Core client fixture ---
@@ -152,7 +155,7 @@ def test_user(core_client) -> dict:
     try:
         core_client.delete(IAM_USERS, uuid=user["uuid"])
     except Exception:
-        pass
+        LOG.exception("Failed to clean up test user %s", user["uuid"])
 
 
 @pytest.fixture(scope="session")
@@ -242,7 +245,7 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
     try:
         s3_api_client.delete(S3_INSTANCES, uuid=instance_uuid)
     except Exception:
-        pass
+        LOG.exception("Failed to clean up S3 instance %s", instance_uuid)
 
 
 def _poll_instance_status(client, instance_uuid, target_status, timeout, interval):

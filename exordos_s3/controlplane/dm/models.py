@@ -101,9 +101,8 @@ class S3Instance(
     version = relationships.relationship(S3Version, required=True, read_only=True)
 
     def _validate_kind(self):
-        if self.kind == S3InstanceKind.SINGLE_NODE.value:
-            if self.nodes_number != 1:
-                raise ValueError("single_node kind requires nodes_number=1")
+        if self.kind == S3InstanceKind.SINGLE_NODE.value and self.nodes_number != 1:
+            raise ValueError("single_node kind requires nodes_number=1")
 
     def insert(self, session=None):
         self._validate_kind()

@@ -150,7 +150,7 @@ class CoreInfraBuilder(builder.CoreInfraBuilder):
 
         # Recreate configs for each node
         new_configs = []
-        for node_uuid_str, _ in nodeset_actual.nodes.items():
+        for node_uuid_str in nodeset_actual.nodes:
             content = RUSTFS_CONF_TEMPLATE.format(
                 root_user="admin",
                 root_secret=instance.root_secret,

@@ -113,7 +113,7 @@ class S3InstanceBuilder(PaaSBuilder):
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
         """Create a list of PaaS objects."""
         return self.actualize_paas_objects(
-            instance, builder.PaaSCollection(paas_objects=tuple())
+            instance, builder.PaaSCollection(paas_objects=())
         )
 
     def actualize_paas_objects(
