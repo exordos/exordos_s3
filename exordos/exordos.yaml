@@ -25,12 +25,12 @@ build:
   elements:
     # Communal shared S3 instance for platform-wide use.
     - manifest: manifests/communal_s3.yaml.j2
+    # s3 dataplane image (launched per s3 instance by the infra builder)
+    - manifest: manifests/s3aas.yaml.j2
       artifacts:
         - path: artifacts/icon.jpg
         - path: artifacts/preview-1.jpg
         - path: artifacts/preview-2.jpg
-    # s3 dataplane image (launched per s3 instance by the infra builder)
-    - manifest: manifests/s3aas.yaml.j2
       images:
       - name: exordos-metapaas-s3-dp
         format: GEN_IMG_FORMAT_CORE=zst
