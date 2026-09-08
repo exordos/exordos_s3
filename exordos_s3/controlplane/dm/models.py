@@ -42,19 +42,22 @@ ROOT_SECRET_ALPHABET = string.ascii_letters + string.digits + "!@#$%^&*"
 # S3 bucket names must be DNS compatible: the dataplane rejects anything else
 # with InvalidBucketName, so bad names are refused here instead of wedging
 # reconciliation of the whole instance.
+#
+# Only the rules every S3 implementation enforces are checked.  The type also
+# runs when a row is read back, so anything it rejects has to be cleaned out of
+# the table by migration 0001; keeping the check to what the dataplane itself
+# refuses means such a row can never have had a bucket behind it.
 BUCKET_NAME_MIN_LENGTH = 3
 BUCKET_NAME_MAX_LENGTH = 63
 
 
 class BucketNameType(types.BaseCompiledRegExpTypeFromAttr):
     pattern = re.compile(
-        # Reserved prefixes, and names shaped like an IPv4 address.
-        r"(?!xn--)(?!sthree-)(?!\d{1,3}(?:\.\d{1,3}){3}\Z)"
+        # Not shaped like an IPv4 address.
+        r"(?!\d{1,3}(?:\.\d{1,3}){3}\Z)"
         # Dot separated labels of lowercase letters, digits and hyphens; every
         # label starts and ends with a letter or a digit.
-        r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*"
-        # Reserved suffixes.
-        r"(?<!-s3alias)(?<!--ol-s3)\Z"
+        r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\Z"
     )
 
     def validate(self, value: tp.Any) -> bool:

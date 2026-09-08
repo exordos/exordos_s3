@@ -35,6 +35,10 @@ class TestBucketNameType:
             "bucket123",
             "1-2-3",
             "a" * 63,
+            # AWS reserves these, RustFS does not, so they are accepted here.
+            "xn--bucket",
+            "sthree-bucket",
+            "bucket-s3alias",
         ],
     )
     def test_valid_names(self, bucket_name: models.BucketNameType, name: str) -> None:
@@ -54,10 +58,6 @@ class TestBucketNameType:
             "my..bucket",  # consecutive dots
             "my.-bucket",  # empty label
             "192.168.0.1",  # IPv4 address
-            "xn--bucket",  # reserved prefix
-            "sthree-bucket",  # reserved prefix
-            "bucket-s3alias",  # reserved suffix
-            "bucket--ol-s3",  # reserved suffix
             "bucket name",  # space
             "bucket\n",  # trailing newline
             None,
