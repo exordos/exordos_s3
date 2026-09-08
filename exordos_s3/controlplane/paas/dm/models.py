@@ -68,7 +68,7 @@ class S3Instance(
     ua_models.InstanceWithDerivativesMixin,
 ):
     __master_model__ = sdk_models.NodeSet
-    __derivative_model_map__ = {
+    __derivative_model_map__: tp.ClassVar[dict[str, type]] = {
         "s3_instance_node": S3InstanceNode,
     }
 

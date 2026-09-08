@@ -20,7 +20,10 @@ import string
 
 from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.dm import filters as dm_filters
-from restalchemy.dm import models, properties, relationships, types
+from restalchemy.dm import models
+from restalchemy.dm import properties
+from restalchemy.dm import relationships
+from restalchemy.dm import types
 from restalchemy.storage.sql import orm
 
 from exordos_s3 import utils as u
@@ -79,7 +82,7 @@ class S3Instance(
     )
     ipsv4 = properties.property(
         types.TypedList(types.String(max_length=15)),
-        default=lambda: [],
+        default=list,
     )
     cpu = properties.property(types.Integer(min_value=1, max_value=128))
     ram = properties.property(types.Integer(min_value=512, max_value=1024**3))
@@ -98,9 +101,8 @@ class S3Instance(
     version = relationships.relationship(S3Version, required=True, read_only=True)
 
     def _validate_kind(self):
-        if self.kind == S3InstanceKind.SINGLE_NODE.value:
-            if self.nodes_number != 1:
-                raise ValueError("single_node kind requires nodes_number=1")
+        if self.kind == S3InstanceKind.SINGLE_NODE.value and self.nodes_number != 1:
+            raise ValueError("single_node kind requires nodes_number=1")
 
     def insert(self, session=None):
         self._validate_kind()

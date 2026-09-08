@@ -43,7 +43,7 @@ class TestBucketUpdatePreservesData:
         bucket_uuid = bucket["uuid"]
 
         # Upload data
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         content = b"survive-the-update"
         s3_conftest.upload_test_object(client, bucket_name, "precious", content)
 
@@ -77,7 +77,7 @@ class TestBucketUpdatePreservesData:
         bucket_uuid = bucket["uuid"]
 
         # Upload data
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         content = b"survive-quota-update"
         s3_conftest.upload_test_object(client, bucket_name, "data", content)
 

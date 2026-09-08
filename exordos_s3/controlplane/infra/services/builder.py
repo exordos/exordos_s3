@@ -53,7 +53,7 @@ class CoreInfraBuilder(builder.CoreInfraBuilder):
         core_password: str,
         core_api_base_url: str,
         project_id: sys_uuid.UUID,
-        instance_model: tp.Type[models.S3Instance] = models.S3Instance,
+        instance_model: type[models.S3Instance] = models.S3Instance,
     ):
         super().__init__(instance_model)
         self._project_id = project_id
@@ -150,7 +150,7 @@ class CoreInfraBuilder(builder.CoreInfraBuilder):
 
         # Recreate configs for each node
         new_configs = []
-        for node_uuid_str, _ in nodeset_actual.nodes.items():
+        for node_uuid_str in nodeset_actual.nodes:
             content = RUSTFS_CONF_TEMPLATE.format(
                 root_user="admin",
                 root_secret=instance.root_secret,

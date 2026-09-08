@@ -19,6 +19,7 @@ S3 data operations."""
 import time
 import uuid
 
+from bazooka import exceptions as bazooka_exc
 import botocore.exceptions
 import pytest
 import requests
@@ -57,7 +58,7 @@ class TestBucketCRUD:
         assert bucket["status"] == "ACTIVE"
 
         # Verify bucket appears in S3 ListBuckets
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         resp = client.list_buckets()
         bucket_names = [b["Name"] for b in resp.get("Buckets", [])]
         assert bucket_name in bucket_names
@@ -77,7 +78,7 @@ class TestBucketCRUD:
         assert bucket["versioning_enabled"] is True
 
         # Verify versioning via S3 API
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         ver = client.get_bucket_versioning(Bucket=bucket_name)
         assert ver.get("Status") == "Enabled"
 
@@ -99,7 +100,7 @@ class TestBucketCRUD:
         assert bucket["object_lock_enabled"] is True
 
         # Verify object lock config via S3 API
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         lock = client.get_object_lock_configuration(Bucket=bucket_name)
         config = lock.get("ObjectLockConfiguration", {})
         assert config.get("ObjectLockEnabled") == "Enabled"
@@ -120,7 +121,7 @@ class TestBucketCRUD:
         time.sleep(10)
 
         # Verify bucket gone from S3
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         resp = client.list_buckets()
         bucket_names = [b["Name"] for b in resp.get("Buckets", [])]
         assert bucket_name not in bucket_names
@@ -137,7 +138,7 @@ class TestS3DataOperations:
             s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
         )
 
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         content = b"hello integration test"
         key = s3_conftest.upload_test_object(client, bucket_name, "test-key", content)
         downloaded = s3_conftest.download_object(client, bucket_name, key)
@@ -151,7 +152,7 @@ class TestS3DataOperations:
             s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
         )
 
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         s3_conftest.upload_test_object(client, bucket_name, "obj1")
         s3_conftest.upload_test_object(client, bucket_name, "obj2")
 
@@ -168,7 +169,7 @@ class TestS3DataOperations:
             s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
         )
 
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         s3_conftest.upload_test_object(client, bucket_name, "to-delete")
 
         client.delete_object(Bucket=bucket_name, Key="to-delete")
@@ -192,7 +193,7 @@ class TestS3DataOperations:
         )
 
         # Upload via authenticated client
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         s3_conftest.upload_test_object(
             client, bucket_name, "public-obj", b"public-data"
         )
@@ -225,7 +226,7 @@ class TestQuotaEnforcement:
             quota_bytes=1024,
         )
 
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
 
         # Small upload should succeed
         client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
@@ -264,7 +265,7 @@ class TestObjectLockRetention:
             default_retention_days=365,
         )
 
-        client = list(s3_clients.values())[0]
+        client = next(iter(s3_clients.values()))
         client.put_object(
             Bucket=bucket_name,
             Key="locked-obj",
@@ -294,7 +295,7 @@ class TestBucketROFields:
 
         # Attempt to update name should fail or be ignored
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
-        with pytest.raises(Exception):
+        with pytest.raises(bazooka_exc.BaseHTTPException):
             s3_api_client.update(collection, uuid=bucket["uuid"], name="new-name")
 
     def test_versioning_enabled_read_only(
@@ -312,7 +313,7 @@ class TestBucketROFields:
 
         # Attempt to update versioning_enabled should fail or be ignored
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
-        with pytest.raises(Exception):
+        with pytest.raises(bazooka_exc.BaseHTTPException):
             s3_api_client.update(
                 collection, uuid=bucket["uuid"], versioning_enabled=True
             )
@@ -335,7 +336,7 @@ class TestInstanceDiskSizeUpdate:
         instance = s3_api_client.get(collection, uuid=s3_instance_uuid)
         old_size = instance.get("disk_size", 0)
         shrink_size = max(old_size - 1, 1)
-        with pytest.raises(Exception):
+        with pytest.raises(bazooka_exc.BaseHTTPException):
             s3_api_client.update(
                 collection, uuid=s3_instance_uuid, disk_size=shrink_size
             )

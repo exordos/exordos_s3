@@ -58,7 +58,7 @@ def _get_default_ip() -> str:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
             return s.getsockname()[0]
-    except Exception:
+    except OSError:
         return "127.0.0.1"
 
 
@@ -138,7 +138,7 @@ def _start_http_server(serve_dir: str, port: int) -> subprocess.Popen:
         [sys.executable, "-m", "http.server", str(port), "--directory", serve_dir],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid,
+        start_new_session=True,
     )
     time.sleep(1)
     if proc.poll() is not None:
@@ -248,6 +248,7 @@ def _wait_for_element(
     while time.monotonic() < deadline:
         result = subprocess.run(
             ["exordos", "-e", endpoint, "-u", username, "-p", password, "ee", "list"],
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -271,14 +272,27 @@ def _wait_for_node(
     last_raw = ""
     while time.monotonic() < deadline:
         result = subprocess.run(
-            ["exordos", "-e", endpoint, "-u", username, "-p", password, "cn", "list", "-o", "json"],
+            [
+                "exordos",
+                "-e",
+                endpoint,
+                "-u",
+                username,
+                "-p",
+                password,
+                "cn",
+                "list",
+                "-o",
+                "json",
+            ],
+            check=False,
             capture_output=True,
             text=True,
         )
         last_raw = result.stdout
         try:
             nodes = json.loads(result.stdout)
-        except Exception:
+        except json.JSONDecodeError:
             time.sleep(15)
             continue
         for node in nodes if isinstance(nodes, list) else []:
@@ -309,6 +323,7 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
                 f"root@{cp_ip}",
                 "grep IAM_USER_PASS /etc/exordos_init.txt | cut -d= -f2",
             ],
+            check=False,
             capture_output=True,
             text=True,
             timeout=30,
@@ -316,7 +331,7 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
         pw = result.stdout.strip()
         if pw:
             return pw
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         _log(f"WARNING: Could not read IAM password via SSH: {e}")
 
     # Fallback: read via virsh guest-exec (if running on the hypervisor host)
@@ -324,6 +339,7 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
         # Find VM name by IP from virsh
         virsh_result = subprocess.run(
             ["sudo", "virsh", "list", "--all"],
+            check=False,
             capture_output=True,
             text=True,
         )
@@ -332,7 +348,10 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
                 vm_name = line.split()[1]
                 script = "cat /etc/exordos_init.txt | grep IAM_USER_PASS | cut -d= -f2"
                 enc = subprocess.run(
-                    ["base64", "-w0"], input=script.encode(), capture_output=True
+                    ["base64", "-w0"],
+                    input=script.encode(),
+                    capture_output=True,
+                    check=False,
                 ).stdout.decode()
                 pid_result = subprocess.run(
                     [
@@ -342,6 +361,7 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
                         vm_name,
                         f'{{"execute":"guest-exec","arguments":{{"path":"/bin/bash","arg":["-c","echo {enc} | base64 -d | bash"],"capture-output":true}}}}',
                     ],
+                    check=False,
                     capture_output=True,
                     text=True,
                 )
@@ -355,6 +375,7 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
                         vm_name,
                         f'{{"execute":"guest-exec-status","arguments":{{"pid":{pid}}}}}',
                     ],
+                    check=False,
                     capture_output=True,
                     text=True,
                 )
@@ -364,7 +385,13 @@ def _get_metapaas_iam_password(cp_ip: str) -> str:
                 pw = base64.b64decode(out.get("out-data", "")).decode().strip()
                 if pw:
                     return pw
-    except Exception as e:
+    except (
+        OSError,
+        subprocess.SubprocessError,
+        ValueError,
+        KeyError,
+        IndexError,
+    ) as e:
         _log(f"WARNING: Could not read IAM password via virsh: {e}")
 
     return METAPAAS_IAM_USER  # fallback to default
