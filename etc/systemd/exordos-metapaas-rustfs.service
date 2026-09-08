@@ -2,7 +2,9 @@
 Description=Exordos MetaPaaS RustFS S3 Storage
 After=network-online.target
 Wants=network-online.target
+RequiresMountsFor=/var/lib/rustfs/data
 ConditionPathExists=/etc/exordos_metapaas/rustfs.env
+AssertPathIsMountPoint=/var/lib/rustfs/data
 
 [Service]
 Type=notify

@@ -82,6 +82,5 @@ deactivate
 sudo cp "$GC_PATH/etc/systemd/exordos-metapaas-s3-agent.service" $SYSTEMD_SERVICE_DIR
 sudo cp "$GC_PATH/etc/systemd/exordos-metapaas-rustfs.service" $SYSTEMD_SERVICE_DIR
 
-# Enable the dataplane agent (rustfs is enabled by bootstrap after the config
-# is delivered by the control plane)
+# The unit ordering keeps the agent behind persistent-storage bootstrap.
 sudo systemctl enable exordos-metapaas-s3-agent
