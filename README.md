@@ -185,25 +185,30 @@ EXORDOS_S3_CP_URL=http://10.20.0.X:8080 \
 make functional
 ```
 
-Or use the E2E preparation script:
+Or use the E2E preparation script against a freshly bootstrapped core
+(`exordos bootstrap -m core`) — this is exactly what the `build` workflow runs:
 
 ```bash
-python exordos_paas_s3/tests/functional/prepare_env.py \
-  --metapaas-dir ../exordos_metapaas \
-  --project-dir . \
-  --output-dir /tmp/s3-build \
-  --endpoint http://10.20.0.2:11010 \
+python exordos_s3/tests/functional/prepare_env.py \
+  --output-dir /tmp/s3aas-build \
+  --http-host 10.20.0.1 \
+  --endpoint http://10.20.0.2/api/core \
   --username admin \
   --password <admin-pass> \
-  --wait-timeout 600
+  --wait-timeout 900
 ```
 
 This script:
-1. Builds s3aas + metapaas elements
-2. Serves them via HTTP
-3. Installs both to running exordos_core
-4. Outputs environment variables for tests
-5. Waits for all nodes ACTIVE
+1. Builds the `exordos_s3` wheel and the elements, pointing their manifests at
+   the local artifact server
+2. Serves the build output: element repository + pip index
+3. Installs `metapaas` from the official repository and `s3aas` from the local
+   one
+4. Waits for the CP node, the element and the s3 API
+5. Prints the environment variables for the tests
+
+It leaves the artifact server running because the manifests reference it; stop
+it with `--cleanup`.
 
 ## Architecture
 

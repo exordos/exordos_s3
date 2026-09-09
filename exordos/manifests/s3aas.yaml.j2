@@ -20,7 +20,10 @@ resources:
       name: "s3"
       element_name: "s3aas"
       package: "exordos_s3"
-      version: "$self:version"
+      # Defaults to the element version; CI overrides it with the version of
+      # the wheel it just built, so the published PyPI release of the same
+      # version cannot shadow the code under test.
+      version: "{{ package_version | default('$self:version') }}"
       index_url: "{{ index_url | default('') }}"
       project_id: "4d657461-0000-0000-0000-000000000002"
 
