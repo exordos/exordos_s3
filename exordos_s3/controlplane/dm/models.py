@@ -15,8 +15,10 @@
 #    under the License.
 
 import enum
+import re
 import secrets
 import string
+import typing as tp
 
 from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.dm import filters as dm_filters
@@ -35,6 +37,39 @@ ROOT_SECRET_LENGTH = 64
 ACCESS_KEY_ALPHABET = string.ascii_letters + string.digits
 SECRET_KEY_ALPHABET = string.ascii_letters + string.digits
 ROOT_SECRET_ALPHABET = string.ascii_letters + string.digits + "!@#$%^&*"
+
+
+# S3 bucket names must be DNS compatible: the dataplane rejects anything else
+# with InvalidBucketName, so bad names are refused here instead of wedging
+# reconciliation of the whole instance.
+#
+# Only the rules every S3 implementation enforces are checked.  The type also
+# runs when a row is read back, and real installations hold no bucket rows that
+# fail it -- keeping the check to what the dataplane itself refuses means such
+# a row could never have had a bucket behind it in the first place.
+BUCKET_NAME_MIN_LENGTH = 3
+BUCKET_NAME_MAX_LENGTH = 63
+
+
+class BucketNameType(types.BaseCompiledRegExpTypeFromAttr):
+    pattern = re.compile(
+        # Not shaped like an IPv4 address.
+        r"(?!\d{1,3}(?:\.\d{1,3}){3}\Z)"
+        # Dot separated labels of lowercase letters, digits and hyphens; every
+        # label starts and ends with a letter or a digit.
+        r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\Z"
+    )
+
+    def validate(self, value: tp.Any) -> bool:
+        if not isinstance(value, str):
+            return False
+        if not BUCKET_NAME_MIN_LENGTH <= len(value) <= BUCKET_NAME_MAX_LENGTH:
+            return False
+        return super().validate(value)
+
+    @property
+    def example(self) -> str:
+        return "my-bucket"
 
 
 class S3Status(str, enum.Enum):
@@ -171,9 +206,7 @@ class InstanceChildModel(
 class S3Bucket(InstanceChildModel):
     __tablename__ = "s3_buckets"
 
-    name = properties.property(
-        types.String(min_length=3, max_length=63), required=True, read_only=True
-    )
+    name = properties.property(BucketNameType(), required=True, read_only=True)
     status = properties.property(
         types.Enum([status.value for status in S3Status]),
         default=S3Status.ACTIVE.value,
