@@ -105,21 +105,23 @@ class Core:
             password,
         ]
 
-    def run(self, args: list[str], check: bool = True) -> str:
+    def run(self, args: list[str], check: bool = True, quiet: bool = False) -> str:
         cmd = ["exordos", *self._auth, *args]
-        # Same command with the password redacted, for the log.
-        shown = [a if a != self._password else "***" for a in cmd]
-        _log(f"  $ {' '.join(shown)}")
+        if not quiet:
+            # Same command with the password redacted, for the log.
+            shown = [a if a != self._password else "***" for a in cmd]
+            _log(f"  $ {' '.join(shown)}")
         result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-        if result.stdout:
+        if result.stdout and not quiet:
             print(result.stdout, end="", flush=True)
         if check and result.returncode != 0:
             print(result.stderr, end="", file=sys.stderr, flush=True)
             raise subprocess.CalledProcessError(result.returncode, cmd)
         return result.stdout
 
-    def json(self, args: list[str]) -> list[dict]:
-        out = self.run([*args, "-o", "json"], check=False)
+    def json(self, args: list[str], quiet: bool = True) -> list[dict]:
+        # Polled in loops, so quiet by default: only the parsed result matters.
+        out = self.run([*args, "-o", "json"], check=False, quiet=quiet)
         # Be forgiving about anything the CLI prints before the payload.
         starts = [i for i in (out.find("["), out.find("{")) if i != -1]
         if not starts:
@@ -294,15 +296,24 @@ def _install_element(
 def _wait_for_element(core: Core, name: str, timeout: int) -> None:
     _log(f"Waiting for element '{name}' to become ACTIVE…")
     deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    seen = ""
     while time.monotonic() < deadline:
         elements = core.json(["ee", "list", "-f", f"name={name}"])
         status = str(elements[0].get("status", "")) if elements else ""
+        if status != seen:
+            _log(f"  element '{name}': {status or '(not listed yet)'}")
+            seen = status
         if status == "ACTIVE":
-            _log(f"Element '{name}' is ACTIVE")
+            _log(f"Element '{name}' is ACTIVE after {time.monotonic() - started:.0f}s")
             return
         if status == "ERROR":
+            core.run(["ee", "show", name], check=False)
             raise RuntimeError(f"Element '{name}' entered ERROR state")
         time.sleep(15)
+    # Leave something to read in the log instead of just the timeout.
+    core.run(["ee", "show", name], check=False)
+    core.run(["cn", "list"], check=False)
     raise TimeoutError(f"Element '{name}' did not become ACTIVE within {timeout}s")
 
 
@@ -324,6 +335,7 @@ def _wait_for_node(core: Core, name_pattern: str, timeout: int) -> str:
                 _log(f"Node '{node.get('name')}' has IP {ip}")
                 return ip
         time.sleep(15)
+    core.run(["cn", "list"], check=False)
     raise TimeoutError(f"No node matching '{name_pattern}' got an IP within {timeout}s")
 
 

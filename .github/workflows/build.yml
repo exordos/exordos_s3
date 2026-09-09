@@ -53,7 +53,7 @@ jobs:
   E2E:
     runs-on: ubuntu-24.04
     if: ${{ github.actor != 'dependabot[bot]' }}
-    timeout-minutes: 90
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,7 +110,9 @@ jobs:
       # Builds the wheel and the element, serves both over HTTP, installs
       # metapaas + s3aas and waits until the s3 API answers.
       - name: Prepare test environment
-        timeout-minutes: 60
+        # The metapaas image is pulled from repo.exordos.com into the core, so
+        # its element takes tens of minutes to reconcile on a GitHub runner.
+        timeout-minutes: 80
         run: |
           set -euo pipefail
           python exordos_s3/tests/functional/prepare_env.py \
@@ -120,7 +122,7 @@ jobs:
             --endpoint "$CORE_ENDPOINT_URL" \
             --username "$CORE_USERNAME" \
             --password "$CORE_PASSWORD" \
-            --wait-timeout 900 \
+            --wait-timeout 1800 \
             2>&1 | tee /tmp/prepare_env.log
           sed -n 's/^  export //p' /tmp/prepare_env.log >> $GITHUB_ENV
 
