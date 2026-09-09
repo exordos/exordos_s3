@@ -30,7 +30,6 @@ import argparse
 import json
 import os
 import pathlib
-import re
 import shutil
 import signal
 import socket
@@ -57,6 +56,10 @@ INDEX_DIR = "simple"
 
 SYSTEM_PROJECT_ID = "00000000-0000-0000-0000-000000000000"
 METAPAAS_IAM_USER = "metapaas"
+# The metapaas element generates its IAM user password into this core secret,
+# in its own system project.
+METAPAAS_SECRET_PROJECT_ID = "12345678-c625-4fee-81d5-f691897b8142"
+METAPAAS_PASSWORD_SECRET = "metapaas_user_password"
 LOCAL_REPO_NAME = "s3aas-local"
 CP_NODE_NAME = "metapaas-cp"
 CP_API_PORT = 8080
@@ -304,26 +307,33 @@ def _wait_for_element(core: Core, name: str, timeout: int) -> None:
 
 
 def _wait_for_node(core: Core, name_pattern: str, timeout: int) -> str:
-    """Wait for a compute node matching the pattern; return its IP address."""
-    _log(f"Waiting for node matching '{name_pattern}' to be ACTIVE…")
+    """Wait for a compute node matching the pattern; return its IP address.
+
+    Only the IP assignment is waited for here: `cn list` reports the declared
+    state, which stays NEW even for nodes that are up — the bootstrapped core
+    node itself included. Readiness is taken from the element and the API.
+    """
+    _log(f"Waiting for the IP of the node matching '{name_pattern}'…")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         for node in core.json(["cn", "list"]):
             if name_pattern not in str(node.get("name", "")):
                 continue
-            if str(node.get("status", "")) != "ACTIVE":
-                continue
-            for value in node.values():
-                match = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", str(value))
-                if match:
-                    _log(f"Node '{node.get('name')}' is ACTIVE at {match.group(1)}")
-                    return match.group(1)
+            ip = str(node.get("ip", "") or "").strip()
+            if ip:
+                _log(f"Node '{node.get('name')}' has IP {ip}")
+                return ip
         time.sleep(15)
-    raise TimeoutError(f"No ACTIVE node matching '{name_pattern}' within {timeout}s")
+    raise TimeoutError(f"No node matching '{name_pattern}' got an IP within {timeout}s")
 
 
-def _wait_for_api(url: str, timeout: int) -> None:
-    """Wait until the URL answers anything — 401/404 mean the API is serving."""
+def _wait_for_api(url: str, timeout: int, expect_route: bool = False) -> None:
+    """Wait until the URL answers.
+
+    Any HTTP status means the API is serving — 401 included. With
+    ``expect_route`` a 404 counts as "not yet": that is how the user-api
+    answers for a plugin route it has not loaded.
+    """
     _log(f"Waiting for {url} …")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -332,6 +342,10 @@ def _wait_for_api(url: str, timeout: int) -> None:
                 _log(f"{url} answered HTTP {response.status}")
                 return
         except urllib.error.HTTPError as exc:
+            if expect_route and exc.code == 404:
+                _log(f"{url} answered HTTP 404, the route is not loaded yet")
+                time.sleep(10)
+                continue
             _log(f"{url} answered HTTP {exc.code}")
             return
         except OSError:
@@ -339,40 +353,26 @@ def _wait_for_api(url: str, timeout: int) -> None:
     raise TimeoutError(f"{url} did not answer within {timeout}s")
 
 
-def _metapaas_password(
-    cp_ip: str, ssh_key: pathlib.Path | None, timeout: int = 120
-) -> str:
-    """Read IAM_USER_PASS from /etc/exordos_init.txt on the metapaas CP node."""
-    command = "grep IAM_USER_PASS /etc/exordos_init.txt | cut -d= -f2"
-    # Without a generated key, fall back to whatever keys ssh finds itself —
-    # the image was built with the caller's own public key.
-    key_args = ["-i", str(ssh_key)] if ssh_key else []
+def _metapaas_password(core: Core, timeout: int = 300) -> str:
+    """Read the metapaas IAM password the element generated in the core.
+
+    It is a `$core.secret.passwords` resource in the metapaas system project;
+    the value only appears once the secret has been reconciled.
+    """
+    _log(f"Reading the '{METAPAAS_PASSWORD_SECRET}' secret…")
+    listing = ["secret", "passwords", "list", "-f", f"name={METAPAAS_PASSWORD_SECRET}"]
+    # Scoped to the project that owns the secret first, unscoped as a fallback.
+    attempts = [["-P", METAPAAS_SECRET_PROJECT_ID, *listing], listing]
     deadline = time.monotonic() + timeout
     while True:
-        result = subprocess.run(
-            [
-                "ssh",
-                *key_args,
-                "-o",
-                "StrictHostKeyChecking=no",
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-                "-o",
-                "ConnectTimeout=10",
-                f"root@{cp_ip}",
-                command,
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        password = result.stdout.strip()
-        if password:
-            return password
+        for args in attempts:
+            for secret in core.json(args):
+                value = str(secret.get("value", "") or "").strip()
+                if value:
+                    return value
         if time.monotonic() >= deadline:
             raise RuntimeError(
-                f"Could not read the metapaas IAM password from {cp_ip}: "
-                f"{result.stderr.strip()}"
+                f"The '{METAPAAS_PASSWORD_SECRET}' secret has no value after {timeout}s"
             )
         time.sleep(10)
 
@@ -458,12 +458,10 @@ def main(argv: list[str] | None = None) -> None:
     wheel_stage = output_dir.parent / f"{output_dir.name}-wheel"
 
     _log("Step 1: SSH key pair")
-    ssh_key: pathlib.Path | None
     if args.developer_key_path:
         pub_key = pathlib.Path(args.developer_key_path)
-        ssh_key = None
     else:
-        ssh_key, pub_key = _generate_ssh_key(key_dir)
+        _, pub_key = _generate_ssh_key(key_dir)
 
     if args.skip_build:
         _log("Step 2: Skipping build (--skip-build)")
@@ -508,6 +506,9 @@ def main(argv: list[str] | None = None) -> None:
     _log("Step 4: Installing the metapaas element")
     _install_element(core, "metapaas")
     cp_ip = _wait_for_node(core, CP_NODE_NAME, args.wait_timeout)
+    cp_url = f"http://{cp_ip}:{CP_API_PORT}"
+    _wait_for_element(core, "metapaas", args.wait_timeout)
+    _wait_for_api(f"{cp_url}/v1/", args.wait_timeout)
 
     _log("Step 5: Installing the s3aas element")
     _register_repository(core, f"{repository_url}/")
@@ -515,14 +516,14 @@ def main(argv: list[str] | None = None) -> None:
     # element only becomes installable a moment later.
     _install_element(core, ELEMENT_NAME, version, retries=30)
     _wait_for_element(core, ELEMENT_NAME, args.wait_timeout)
-
-    cp_url = f"http://{cp_ip}:{CP_API_PORT}"
     # The plugin reconciler pip-installs the plugin and reloads the user-api;
-    # the routes only appear once that is through.
-    _wait_for_api(f"{cp_url}/v1/", args.wait_timeout)
+    # the s3 routes answer 404 until that is through.
+    _wait_for_api(
+        f"{cp_url}/v1/types/s3/versions/", args.wait_timeout, expect_route=True
+    )
 
     _log("Step 6: Reading the metapaas IAM password")
-    metapaas_password = _metapaas_password(cp_ip, ssh_key)
+    metapaas_password = _metapaas_password(core)
 
     _print_summary(args, cp_url, metapaas_password)
 
