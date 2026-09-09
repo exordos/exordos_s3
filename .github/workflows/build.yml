@@ -92,7 +92,13 @@ jobs:
           exordos settings set-realm default --endpoint $CORE_ENDPOINT_URL
           exordos settings set-context default --name default \
             --user $CORE_USERNAME --password $CORE_PASSWORD
-          exordos bootstrap -i latest -f -m core \
+          # --pool-agent-placement=core (the default since exordos CLI 3.2)
+          # puts the pool agent inside core and has it reach libvirt over
+          # qemu+tcp://10.20.0.1 — but `hypervisors init` configures the local
+          # socket only ("skipping remote TCP setup"), so nothing ever creates
+          # a machine and every node stays NEW. `local` installs the agent on
+          # this runner, against the socket that init actually set up.
+          exordos bootstrap -i latest -f -m core --pool-agent-placement local \
             --admin-password $CORE_PASSWORD --cidr 10.20.0.0/22
 
           for i in {1..60}; do
