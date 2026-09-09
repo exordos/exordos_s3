@@ -129,9 +129,30 @@ jobs:
       - name: Run functional tests
         run: tox -e ${{ env.TOX_ENV }}-functional
 
+      # The compute agent runs on this runner, so when a node will not come up
+      # the reason is in its journal, not in the core API.
+      - name: Collect hypervisor diagnostics
+        if: failure()
+        run: |
+          set +e
+          echo "===== exordos/libvirt units ====="
+          systemctl list-units --all --no-pager | grep -iE "exordos|libvirt"
+          echo "===== exordos journal ====="
+          sudo journalctl -u 'exordos*' --no-pager -n 400
+          echo "===== libvirt journal ====="
+          sudo journalctl -u libvirtd --no-pager -n 100
+          echo "===== domains ====="
+          sudo virsh list --all
+          echo "===== disk / memory ====="
+          df -h /
+          free -m
+          echo "===== image caches ====="
+          sudo ls -lhR /var/lib/exordos 2>/dev/null | head -50
+          ls -lh "$HOME/.cache/exordos" 2>/dev/null
+
       - name: Debug session on failure
         uses: owenthereal/action-upterm@v1
         if: failure()
         with:
           limit-access-to-actor: true
-          wait-timeout-minutes: 30
+          wait-timeout-minutes: 5
