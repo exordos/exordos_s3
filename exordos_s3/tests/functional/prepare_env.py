@@ -275,9 +275,14 @@ def _register_repository(core: Core, url: str) -> None:
 
 
 def _install_element(
-    core: Core, name: str, version: str | None = None, retries: int = 1
+    core: Core, name: str, version: str | None = None, retries: int = 5
 ) -> None:
-    """Install an element, retrying while its repository is still being scanned."""
+    """Install an element, retrying on a busy core.
+
+    The default covers transient API errors — a read timeout or a 502 while
+    the core reconciles; a larger count covers a repository the core has not
+    finished scanning yet.
+    """
     cmd = ["ee", "install", name]
     # "latest" is not a version the CLI accepts: omitting --version means latest.
     if version and version != "latest":

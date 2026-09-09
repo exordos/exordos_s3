@@ -135,10 +135,14 @@ jobs:
         if: failure()
         run: |
           set +e
-          echo "===== exordos/libvirt units ====="
-          systemctl list-units --all --no-pager | grep -iE "exordos|libvirt"
-          echo "===== exordos journal ====="
-          sudo journalctl -u 'exordos*' --no-pager -n 400
+          echo "===== running services ====="
+          systemctl list-units --type=service --state=running --no-pager
+          echo "===== agent processes ====="
+          ps -ef | grep -iE "agent|libvirtd|qemu-system" | grep -v grep
+          # `exordos compute hypervisors init` sets up a "local universal
+          # agent", whose unit is not named after exordos.
+          echo "===== agent journal ====="
+          sudo journalctl -u '*agent*' --no-pager -n 400
           echo "===== libvirt journal ====="
           sudo journalctl -u libvirtd --no-pager -n 100
           echo "===== domains ====="
