@@ -179,8 +179,6 @@ Requires live exordos_core + exordos_metapaas deployment:
 EXORDOS_ENDPOINT=http://10.20.0.2:11010 \
 EXORDOS_USERNAME=admin \
 EXORDOS_PASSWORD=<pass> \
-METAPAAS_USERNAME=metapaas \
-METAPAAS_PASSWORD=<pass> \
 EXORDOS_S3_CP_URL=http://10.20.0.X:8080 \
 make functional
 ```

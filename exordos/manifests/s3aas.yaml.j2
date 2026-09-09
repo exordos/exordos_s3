@@ -19,12 +19,7 @@ resources:
     s3:
       name: "s3"
       element_name: "s3aas"
-      package: "exordos_s3"
-      # Defaults to the element version; CI overrides it with the version of
-      # the wheel it just built, so the published PyPI release of the same
-      # version cannot shadow the code under test.
-      version: "{{ package_version | default('$self:version') }}"
-      index_url: "{{ index_url | default('') }}"
+      package: "{{ artifacts.pypi_package }}"
       project_id: "4d657461-0000-0000-0000-000000000002"
 
   # s3 IAM permissions bound to the metapaas project owner role.

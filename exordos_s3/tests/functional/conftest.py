@@ -25,12 +25,6 @@ METAPAAS_PROJECT_ID = os.environ.get(
     "METAPAAS_PROJECT_ID", "4d657461-0000-0000-0000-000000000002"
 )
 
-# Metapaas service account — has owner role in the metapaas project.
-# Needed to query S3 versions which are scoped to the metapaas project.
-# Defaults to the well-known metapaas IAM user; override via env vars.
-METAPAAS_USERNAME = os.environ.get("METAPAAS_USERNAME", "metapaas")
-METAPAAS_PASSWORD = os.environ.get("METAPAAS_PASSWORD", "")
-
 # S3 CP URL — metapaas user-api on metapaas-cp node (port 8080)
 # Can be overridden; otherwise resolved from the metapaas-cp compute node.
 EXORDOS_S3_CP_URL = os.environ.get("EXORDOS_S3_CP_URL", "")
@@ -111,28 +105,6 @@ def s3_cp_ip(core_client) -> str:
     return ip
 
 
-# --- Metapaas admin client (for reading versions from metapaas project) ---
-
-
-@pytest.fixture(scope="session")
-def metapaas_admin_client(s3_cp_ip) -> http_client.CollectionBaseClient:
-    """Admin S3 API client scoped to the metapaas project.
-
-    Used to query S3 versions which live in the metapaas project.
-    """
-    cp_url = EXORDOS_S3_CP_URL or f"http://{s3_cp_ip}:8080"
-    metapaas_scope = http_client.CoreIamAuthenticator.project_scope(
-        sys_uuid.UUID(METAPAAS_PROJECT_ID)
-    )
-    core_auth = http_client.CoreIamAuthenticator(
-        base_url=EXORDOS_ENDPOINT,
-        username=METAPAAS_USERNAME,
-        password=METAPAAS_PASSWORD,
-        scope=metapaas_scope,
-    )
-    return http_client.CollectionBaseClient(base_url=cp_url, auth=core_auth)
-
-
 # --- Test user and project ---
 
 
@@ -207,13 +179,19 @@ def s3_api_client(
     return http_client.CollectionBaseClient(base_url=cp_url, auth=core_auth)
 
 
-# --- S3 version (from metapaas project via admin) ---
+# --- S3 version (from the metapaas project) ---
 
 
 @pytest.fixture(scope="session")
-def s3_version_uuid(metapaas_admin_client) -> str:
-    """Get the first available S3 version UUID from the metapaas project."""
-    versions = metapaas_admin_client.filter(S3_VERSIONS)
+def s3_version_uuid(s3_api_client) -> str:
+    """Get the first available S3 version UUID from the metapaas project.
+
+    The versions live in the metapaas project, which is the project the test
+    user is scoped to and owns — the same owner role that carries every other
+    s3 permission also carries s3_version_read, so no separate service
+    account (and no reading of its generated password) is needed.
+    """
+    versions = s3_api_client.filter(S3_VERSIONS)
     if not versions:
         pytest.skip("No S3 versions registered — is s3aas element installed?")
     return versions[0]["uuid"]

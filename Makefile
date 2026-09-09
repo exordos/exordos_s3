@@ -38,7 +38,7 @@ env-clean:
 		--output-dir $(OUTPUT_DIR) --cleanup
 
 wheel:
-	python -m build --wheel
+	tox -e wheel
 
 lint:
 	tox -e ruff-check

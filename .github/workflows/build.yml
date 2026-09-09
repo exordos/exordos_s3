@@ -10,130 +10,165 @@ env:
   PYTHON_VERSION: "3.12"
   TOX_ENV: "py312"
   CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
+  S3_URL: http://10.20.0.2:80/api/metapaas
   CORE_USERNAME: "admin"
   CORE_PASSWORD: "admin"
   # Address the CI VMs reach the artifact server (run by prepare_env.py on the
   # runner) at: 10.20.0.1 is the hypervisor host on the bootstrapped core CIDR.
   ARTIFACTS_HOST: "10.20.0.1"
   ARTIFACTS_PORT: "8081"
+  ELEMENT_DEPS: "metapaas"
+  ELEMENT_NAME: s3aas
 
 jobs:
-  # Build and publish the element on the self-hosted builder, the same way
-  # every other exordos element does it (see exordos_ecosystem).
   Build:
     runs-on: [self-hosted, vm]
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if : ${{ github.actor != 'dependabot[bot]' }}
     strategy:
       fail-fast: true
+    outputs:
+      s3aas_version: ${{ steps.build_element.outputs.s3aas_version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Build Element
+        id: build_element
         env:
           PUSH_CFG: ${{ secrets.PUSH_CFG }}
         run: |
           set -eux
+
+          VERSION="$(exordos get-version .)"
+          echo "s3aas_version=${VERSION}" >> $GITHUB_OUTPUT
 
           exordos build $(pwd)
 
           # Decode and write the push configuration
           echo "$PUSH_CFG" | base64 -d > exordos/exordos.push.yaml
           exordos push -c exordos/exordos.push.yaml -t local -f --latest
-      - name: Setup upterm session
-        uses: owenthereal/action-upterm@v1
-        if: ${{ failure() }}
-        with:
-          limit-access-to-actor: true
-          wait-timeout-minutes: 15
 
   # End-to-end run: a throwaway core on a GitHub runner, the element built from
   # this commit installed into it, then the functional suite. prepare_env.py
   # owns the whole environment setup so the same command works locally.
   E2E:
     runs-on: ubuntu-24.04
+    needs: Build
     if: ${{ github.actor != 'dependabot[bot]' }}
-    timeout-minutes: 110
+    env:
+      S3AAS_VERSION: ${{ needs.Build.outputs.s3aas_version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
       - name: Setup packer
         uses: hashicorp/setup-packer@main
         with:
           version: ${{ env.PACKER_VERSION }}
-
       - name: Install exordos CLI
         run: curl -fsSL https://repo.exordos.com/install.sh | sudo sh
-
       - name: Install hypervisor
         run: |
-          sudo exordos compute hypervisors init
+          set -eux
+
+          # Prefetch the core artifacts into ~/.cache/exordos while the
+          # hypervisor packages are being installed: both steps are
+          # independent and each takes around half a minute.
+          exordos bootstrap -i latest -m core --download-only > prefetch.log 2>&1 &
+          PREFETCH_PID=$!
+
+          sudo exordos compute hypervisors init --connection-uri qemu+tcp://10.20.0.1/system
           sudo chmod 666 /dev/kvm
-
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v7
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install uv + tox + build
-        uses: astral-sh/setup-uv@v7
-      - run: |
-          sudo apt-get update && sudo apt-get install --yes libev-dev
-          uv tool install tox --with tox-uv
-          pip install build
-
+          
+          wait $PREFETCH_PID || { cat prefetch.log; exit 1; }
+          cat prefetch.log
       - name: Bootstrap exordos_core
         timeout-minutes: 20
         run: |
           set -eux
 
           exordos settings set-realm default --endpoint $CORE_ENDPOINT_URL
-          exordos settings set-context default --name default \
-            --user $CORE_USERNAME --password $CORE_PASSWORD
-          # --pool-agent-placement=core (the default since exordos CLI 3.2)
-          # puts the pool agent inside core and has it reach libvirt over
-          # qemu+tcp://10.20.0.1 — but `hypervisors init` configures the local
-          # socket only ("skipping remote TCP setup"), so nothing ever creates
-          # a machine and every node stays NEW. `local` installs the agent on
-          # this runner, against the socket that init actually set up.
+          exordos settings set-context default --name default --user $CORE_USERNAME --password $CORE_PASSWORD
           exordos bootstrap -i latest -f -m core --pool-agent-placement local \
             --admin-password $CORE_PASSWORD --cidr 10.20.0.0/22
 
           for i in {1..60}; do
-            exordos ready_api && break
+            if exordos ready_api; then
+              echo "Exordos Core API is ready"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Exordos Core API did not become ready"
+              exit 1
+            fi
             echo "Waiting for Exordos Core API... ($i/60)"
-            sleep 5
+            sleep 2
           done
-          exordos ready_api
+          
+          while [ $(exordos ee l -o json -f name=core | jq -r .[0]."status") != "ACTIVE" ]; do
+            sleep 2
+          done
 
           # The runner is a single small VM: let the hypervisor overbook so the
           # metapaas CP and the s3 dataplane both fit.
           HYPER_UUID="$(exordos c h l -o json | jq -r '.[0].uuid')"
           exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
+      - name: Preload dependencies in background
+        run: |
+          for dep in $ELEMENT_DEPS; do
+            exordos e elements install $dep
+          done
+      - name: install s3aas
+        run: |
+          exordos e e install $ELEMENT_NAME -v $S3AAS_VERSION
+      - name: check exordos s3aas
+        timeout-minutes: 10
+        run: |
+          set -eux
 
+          while [ $(exordos ee l -o json -f name=$ELEMENT_NAME | jq -r .[0]."status") != "ACTIVE" ]; do
+            sleep 5
+          done
+
+          exordos e e show $ELEMENT_NAME
+      #- name: Set up Python ${{ env.PYTHON_VERSION }}
+      #  uses: actions/setup-python@v7
+      #  with:
+      #    python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
+      #- name: Pip install build
+      #  run: pip install build
       # Builds the wheel and the element, serves both over HTTP, installs
       # metapaas + s3aas and waits until the s3 API answers.
-      - name: Prepare test environment
+      #- name: Prepare test environment
         # The metapaas image is pulled from repo.exordos.com into the core, so
         # its element takes tens of minutes to reconcile on a GitHub runner.
-        timeout-minutes: 80
-        run: |
-          set -euo pipefail
-          python exordos_s3/tests/functional/prepare_env.py \
-            --output-dir /tmp/s3aas-build \
-            --http-host "$ARTIFACTS_HOST" \
-            --http-port "$ARTIFACTS_PORT" \
-            --endpoint "$CORE_ENDPOINT_URL" \
-            --username "$CORE_USERNAME" \
-            --password "$CORE_PASSWORD" \
-            --wait-timeout 1800 \
-            2>&1 | tee /tmp/prepare_env.log
-          sed -n 's/^  export //p' /tmp/prepare_env.log >> $GITHUB_ENV
+      #  timeout-minutes: 80
+      #  run: |
+      #    set -euo pipefail
+      #    python exordos_s3/tests/functional/prepare_env.py \
+      #      --output-dir /tmp/s3aas-build \
+      #      --http-host "$ARTIFACTS_HOST" \
+      #     --http-port "$ARTIFACTS_PORT" \
+      #      --endpoint "$CORE_ENDPOINT_URL" \
+      #      --username "$CORE_USERNAME" \
+      #      --password "$CORE_PASSWORD" \
+      #      --wait-timeout 1800 \
+      #      2>&1 | tee /tmp/prepare_env.log
+      #    sed -n 's/^  export //p' /tmp/prepare_env.log >> $GITHUB_ENV
 
       - name: Run functional tests
-        run: tox -e ${{ env.TOX_ENV }}-functional
+        run: |
+          set -eux
+          export EXORDOS_ENDPOINT=$CORE_ENDPOINT_URL
+          export EXORDOS_USERNAME=$CORE_USERNAME
+          export EXORDOS_PASSWORD=$CORE_PASSWORD
+          export EXORDOS_S3_CP_URL=$S3_URL
+          export EXORDOS_POLL_TIMEOUT=1800
+          tox -e ${{ env.TOX_ENV }}-functional
 
       # The compute agent runs on this runner, so when a node will not come up
       # the reason is in its journal, not in the core API.

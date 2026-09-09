@@ -10,7 +10,7 @@ everything else:
   3. Serve the build output: element repository + pip index for the plugin.
   4. Register that server as an element repository in the core.
   5. Install ``metapaas`` (official repo) and ``s3aas`` (local repository),
-     then wait for the CP node, the element and the s3 API.
+     then wait for the CP node, the elements and the s3 API.
   6. Print the env vars the functional suite needs.
 
 The HTTP server is detached on purpose: the manifests reference it, so it has
@@ -55,11 +55,6 @@ ELEMENTS_DIR = "exordos-elements"
 INDEX_DIR = "simple"
 
 SYSTEM_PROJECT_ID = "00000000-0000-0000-0000-000000000000"
-METAPAAS_IAM_USER = "metapaas"
-# The metapaas element generates its IAM user password into this core secret,
-# in its own system project.
-METAPAAS_SECRET_PROJECT_ID = "12345678-c625-4fee-81d5-f691897b8142"
-METAPAAS_PASSWORD_SECRET = "metapaas_user_password"
 LOCAL_REPO_NAME = "s3aas-local"
 CP_NODE_NAME = "metapaas-cp"
 CP_API_PORT = 8080
@@ -370,30 +365,6 @@ def _wait_for_api(url: str, timeout: int, expect_route: bool = False) -> None:
     raise TimeoutError(f"{url} did not answer within {timeout}s")
 
 
-def _metapaas_password(core: Core, timeout: int = 300) -> str:
-    """Read the metapaas IAM password the element generated in the core.
-
-    It is a `$core.secret.passwords` resource in the metapaas system project;
-    the value only appears once the secret has been reconciled.
-    """
-    _log(f"Reading the '{METAPAAS_PASSWORD_SECRET}' secret…")
-    listing = ["secret", "passwords", "list", "-f", f"name={METAPAAS_PASSWORD_SECRET}"]
-    # Scoped to the project that owns the secret first, unscoped as a fallback.
-    attempts = [["-P", METAPAAS_SECRET_PROJECT_ID, *listing], listing]
-    deadline = time.monotonic() + timeout
-    while True:
-        for args in attempts:
-            for secret in core.json(args):
-                value = str(secret.get("value", "") or "").strip()
-                if value:
-                    return value
-        if time.monotonic() >= deadline:
-            raise RuntimeError(
-                f"The '{METAPAAS_PASSWORD_SECRET}' secret has no value after {timeout}s"
-            )
-        time.sleep(10)
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -539,15 +510,10 @@ def main(argv: list[str] | None = None) -> None:
         f"{cp_url}/v1/types/s3/versions/", args.wait_timeout, expect_route=True
     )
 
-    _log("Step 6: Reading the metapaas IAM password")
-    metapaas_password = _metapaas_password(core)
-
-    _print_summary(args, cp_url, metapaas_password)
+    _print_summary(args, cp_url)
 
 
-def _print_summary(
-    args: argparse.Namespace, cp_url: str, metapaas_password: str
-) -> None:
+def _print_summary(args: argparse.Namespace, cp_url: str) -> None:
     _log("=" * 60)
     _log("Environment ready! Env vars for the functional tests:")
     _log("")
@@ -555,8 +521,6 @@ def _print_summary(
     print(f"  export EXORDOS_ENDPOINT={args.endpoint}", flush=True)
     print(f"  export EXORDOS_USERNAME={args.username}", flush=True)
     print(f"  export EXORDOS_PASSWORD={args.password}", flush=True)
-    print(f"  export METAPAAS_USERNAME={METAPAAS_IAM_USER}", flush=True)
-    print(f"  export METAPAAS_PASSWORD={metapaas_password}", flush=True)
     print(f"  export EXORDOS_S3_CP_URL={cp_url}", flush=True)
     print(f"  export EXORDOS_POLL_TIMEOUT={args.wait_timeout}", flush=True)
     _log("")
