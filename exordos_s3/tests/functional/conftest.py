@@ -265,6 +265,9 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
     }
     instance = s3_api_client.create(S3_INSTANCES, data=data)
     instance_uuid = instance["uuid"]
+    LOG.info(
+        "Created s3 instance %s (%s), waiting for ACTIVE", instance_name, instance_uuid
+    )
     yield _poll_instance_status(
         s3_api_client, instance_uuid, "ACTIVE", POLL_TIMEOUT, POLL_INTERVAL
     )
@@ -275,7 +278,8 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
 
 
 def _poll_instance_status(client, instance_uuid, target_status, timeout, interval):
-    deadline = time.monotonic() + timeout
+    start = last_report = time.monotonic()
+    deadline = start + timeout
     last_status = ""
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -290,8 +294,21 @@ def _poll_instance_status(client, instance_uuid, target_status, timeout, interva
             time.sleep(interval)
             continue
         last_error = None
-        last_status = instance.get("status", "")
+        status = instance.get("status", "")
+        elapsed = round(time.monotonic() - start)
+        # A status change is news; otherwise say something every half minute
+        # so a run that takes minutes does not look like a hung one.
+        if status != last_status or time.monotonic() - last_report >= 30:
+            LOG.info("Instance %s is %s after %ds", instance_uuid, status, elapsed)
+            last_report = time.monotonic()
+        last_status = status
         if last_status == target_status:
+            LOG.info(
+                "Instance %s reached %s after %ds",
+                instance_uuid,
+                target_status,
+                elapsed,
+            )
             return instance
         if last_status in ("ERROR", "CREATE_FAILED", "DELETE_FAILED"):
             pytest.fail(f"Instance entered terminal status: {last_status}")
