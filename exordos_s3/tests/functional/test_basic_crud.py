@@ -16,7 +16,6 @@
 """Basic CRUD integration tests — instance lifecycle, bucket creation, and
 S3 data operations."""
 
-import time
 import uuid
 
 from bazooka import exceptions as bazooka_exc
@@ -48,23 +47,23 @@ class TestBucketCRUD:
     """Bucket creation via CP API and verification via S3 data API."""
 
     def test_create_bucket(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-bucket-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
         assert bucket["name"] == bucket_name
         assert bucket["status"] == "ACTIVE"
 
         # Verify bucket appears in S3 ListBuckets
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         resp = client.list_buckets()
         bucket_names = [b["Name"] for b in resp.get("Buckets", [])]
         assert bucket_name in bucket_names
 
     def test_create_versioned_bucket(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-ver-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -72,18 +71,18 @@ class TestBucketCRUD:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             versioning_enabled=True,
         )
         assert bucket["versioning_enabled"] is True
 
         # Verify versioning via S3 API
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         ver = client.get_bucket_versioning(Bucket=bucket_name)
         assert ver.get("Status") == "Enabled"
 
     def test_create_object_lock_bucket(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-lock-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -91,7 +90,7 @@ class TestBucketCRUD:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             versioning_enabled=True,
             object_lock_enabled=True,
             default_retention_mode="COMPLIANCE",
@@ -100,29 +99,26 @@ class TestBucketCRUD:
         assert bucket["object_lock_enabled"] is True
 
         # Verify object lock config via S3 API
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         lock = client.get_object_lock_configuration(Bucket=bucket_name)
         config = lock.get("ObjectLockConfiguration", {})
         assert config.get("ObjectLockEnabled") == "Enabled"
 
     def test_delete_bucket(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-del-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         # Delete via CP API
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
         s3_api_client.delete(collection, uuid=bucket["uuid"])
 
-        # Wait for dataplane sync (bucket deletion needs time to propagate)
-        time.sleep(10)
-
-        # Verify bucket gone from S3
-        client = next(iter(s3_clients.values()))
-        resp = client.list_buckets()
+        # Verify the bucket goes away on the dataplane too
+        s3_conftest.wait_for_bucket(s3_probe_client, bucket_name, present=False)
+        resp = s3_probe_client.list_buckets()
         bucket_names = [b["Name"] for b in resp.get("Buckets", [])]
         assert bucket_name not in bucket_names
 
@@ -131,28 +127,28 @@ class TestS3DataOperations:
     """Basic S3 data operations: put, get, list, delete objects."""
 
     def test_put_and_get_object(
-        self, s3_clients, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-data-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         content = b"hello integration test"
         key = s3_conftest.upload_test_object(client, bucket_name, "test-key", content)
         downloaded = s3_conftest.download_object(client, bucket_name, key)
         assert downloaded == content
 
     def test_list_objects(
-        self, s3_clients, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-list-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         s3_conftest.upload_test_object(client, bucket_name, "obj1")
         s3_conftest.upload_test_object(client, bucket_name, "obj2")
 
@@ -162,14 +158,14 @@ class TestS3DataOperations:
         assert "obj2" in keys
 
     def test_delete_object(
-        self, s3_clients, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-delobj-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         s3_conftest.upload_test_object(client, bucket_name, "to-delete")
 
         client.delete_object(Bucket=bucket_name, Key="to-delete")
@@ -179,7 +175,12 @@ class TestS3DataOperations:
         assert "to-delete" not in keys
 
     def test_bucket_public_access(
-        self, s3_clients, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         """Public bucket allows unauthenticated read."""
         bucket_name = f"test-pub-{uuid.uuid4().hex[:8]}"
@@ -188,12 +189,12 @@ class TestS3DataOperations:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             public=True,
         )
 
         # Upload via authenticated client
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         s3_conftest.upload_test_object(
             client, bucket_name, "public-obj", b"public-data"
         )
@@ -209,7 +210,7 @@ class TestQuotaEnforcement:
     """Uploading beyond quota_bytes should fail."""
 
     def test_upload_beyond_quota_denied(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-quota-{uuid.uuid4().hex[:8]}"
         # 1 KB quota
@@ -218,11 +219,11 @@ class TestQuotaEnforcement:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             quota_bytes=1024,
         )
 
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
 
         # Small upload should succeed
         client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
@@ -243,7 +244,7 @@ class TestObjectLockRetention:
 
     @pytest.mark.skip(reason="RustFS does not enforce object lock retention yet")
     def test_retention_prevents_delete(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-ret-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
@@ -251,14 +252,14 @@ class TestObjectLockRetention:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             versioning_enabled=True,
             object_lock_enabled=True,
             default_retention_mode="COMPLIANCE",
             default_retention_days=365,
         )
 
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         client.put_object(
             Bucket=bucket_name,
             Key="locked-obj",
@@ -279,11 +280,11 @@ class TestBucketROFields:
     """Read-only bucket fields cannot be updated via CP API."""
 
     def test_bucket_name_read_only(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-ro-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         # Attempt to update name should fail or be ignored
@@ -292,7 +293,7 @@ class TestBucketROFields:
             s3_api_client.update(collection, uuid=bucket["uuid"], name="new-name")
 
     def test_versioning_enabled_read_only(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"test-rover-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -300,7 +301,7 @@ class TestBucketROFields:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             versioning_enabled=False,
         )
 

@@ -35,7 +35,15 @@ EXORDOS_S3_CP_URL = os.environ.get("EXORDOS_S3_CP_URL", "")
 EXORDOS_S3_ENDPOINT = os.environ.get("EXORDOS_S3_ENDPOINT", "")
 
 POLL_TIMEOUT = int(os.environ.get("EXORDOS_POLL_TIMEOUT", "600"))
-POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "15"))
+POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "5"))
+
+# A change accepted by the CP API reaches the dataplane a moment later: a new
+# bucket shows up in RustFS, a deleted key stops being accepted.  Poll for the
+# effect rather than sleeping a flat ten seconds -- on a quiet runner it lands
+# in about a second, and a busy one gets the whole timeout instead of a coin
+# flip.
+SYNC_TIMEOUT = int(os.environ.get("EXORDOS_SYNC_TIMEOUT", "60"))
+SYNC_INTERVAL = 1
 
 # The core, the metapaas CP and every s3 node share a single CI runner, so the
 # core API blips under load: a request comes back 401 because IAM did not
@@ -428,6 +436,17 @@ def s3_clients(access_keys_with_secrets, s3_endpoint) -> dict[str, boto3.client]
     return clients
 
 
+@pytest.fixture(scope="session")
+def s3_probe_client(s3_clients) -> boto3.client:
+    """The session user's client, used to watch the dataplane catch up.
+
+    Its policy allows everything on every bucket, so it can see whatever the
+    tests create -- including buckets that belong to a user the test has not
+    built yet.
+    """
+    return next(iter(s3_clients.values()))
+
+
 # --- Helper utilities ---
 
 
@@ -450,7 +469,7 @@ def _generate_test_secret_key() -> str:
 
 
 def _wait_for_access_key_sync(
-    s3_endpoint, access_key, secret_key, timeout=120, interval=3
+    s3_endpoint, access_key, secret_key, timeout=120, interval=SYNC_INTERVAL
 ):
     client = boto3.client(
         "s3",
@@ -486,35 +505,62 @@ def _wait_for_access_key_sync(
     raise TimeoutError(f"Access key {access_key} not synced within {timeout}s")
 
 
-def _wait_for_bucket_sync(
-    s3_endpoint, bucket_name, access_key, secret_key, timeout=60, interval=2
+def wait_for_bucket(
+    s3_client, bucket_name, present=True, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL
 ):
-    client = boto3.client(
-        "s3",
-        endpoint_url=f"http://{s3_endpoint}",
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name="us-east-1",
-        config=botocore.config.Config(
-            signature_version="s3v4",
-            retries={"max_attempts": 3, "mode": "standard"},
-        ),
-    )
-    start = time.time()
-    while time.time() - start < timeout:
+    """Wait until the bucket does (or no longer does) exist on the dataplane."""
+    deadline = time.monotonic() + timeout
+    last_error = ""
+    while True:
         try:
-            client.head_bucket(Bucket=bucket_name)
-            return
+            s3_client.head_bucket(Bucket=bucket_name)
+            found, last_error = True, ""
         except botocore.exceptions.ClientError as e:
-            code = e.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchBucket", "404", "InvalidAccessKeyId", ""):
-                time.sleep(interval)
-                continue
-            raise
-        except botocore.exceptions.EndpointConnectionError:
+            # A bucket that is not there yet answers 404; a key the dataplane
+            # has not learned about yet answers 403 or InvalidAccessKeyId.
+            # Either way it is not serving this bucket.
+            last_error = e.response.get("Error", {}).get("Code", "")
+            found = False
+        except botocore.exceptions.EndpointConnectionError as e:
+            last_error, found = str(e), False
+        if found == present:
+            return
+        if time.monotonic() >= deadline:
+            state = "appear" if present else "disappear"
+            detail = f" (last error: {last_error})" if last_error else ""
+            raise TimeoutError(
+                f"Bucket {bucket_name} did not {state} within {timeout}s{detail}"
+            )
+        time.sleep(interval)
+
+
+def wait_until_denied(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
+    """Wait until an S3 operation starts failing, and return the error.
+
+    A revocation -- a deleted key, a detached policy -- reaches the dataplane
+    after the CP API has confirmed it, so the call keeps working for a moment.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            operation()
+        except botocore.exceptions.ClientError as e:
+            return e
+        if time.monotonic() >= deadline:
+            pytest.fail(f"Operation was still permitted after {timeout}s")
+        time.sleep(interval)
+
+
+def wait_until_allowed(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
+    """Wait until an S3 operation starts succeeding, and return its result."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return operation()
+        except botocore.exceptions.ClientError:
+            if time.monotonic() >= deadline:
+                raise
             time.sleep(interval)
-            continue
-    raise TimeoutError(f"Bucket {bucket_name} not synced within {timeout}s")
 
 
 def make_s3_client(s3_endpoint, access_key, secret_key):
@@ -532,8 +578,9 @@ def make_s3_client(s3_endpoint, access_key, secret_key):
 
 
 def create_bucket_via_api(
-    s3_api_client, instance_uuid, name, project_id, s3_endpoint, **kwargs
+    s3_api_client, instance_uuid, name, project_id, s3_client, **kwargs
 ):
+    """Create a bucket and return once the dataplane serves it."""
     collection = f"{S3_INSTANCES}{instance_uuid}/buckets/"
     data = {
         "name": name,
@@ -542,7 +589,7 @@ def create_bucket_via_api(
         **kwargs,
     }
     result = s3_api_client.create(collection, data=data)
-    time.sleep(10)
+    wait_for_bucket(s3_client, name)
     return result
 
 
@@ -596,10 +643,5 @@ def create_access_key_via_api(
     }
     result = s3_api_client.create(collection, data=data)
     result["secret_key"] = result.get("secret_key", secret_key)
-    try:
-        _wait_for_access_key_sync(
-            s3_endpoint, result["access_key"], result["secret_key"]
-        )
-    except TimeoutError:
-        time.sleep(10)
+    _wait_for_access_key_sync(s3_endpoint, result["access_key"], result["secret_key"])
     return result
