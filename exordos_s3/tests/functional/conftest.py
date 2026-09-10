@@ -5,12 +5,14 @@ import os
 import time
 import uuid as sys_uuid
 
+from bazooka import exceptions as bazooka_exc
 import boto3
 import botocore.config
 import botocore.exceptions
 from exordos.clients import base_client
 from gcl_sdk.clients.http import base as http_client
 import pytest
+import requests
 
 LOG = logging.getLogger(__name__)
 
@@ -34,6 +36,14 @@ EXORDOS_S3_ENDPOINT = os.environ.get("EXORDOS_S3_ENDPOINT", "")
 
 POLL_TIMEOUT = int(os.environ.get("EXORDOS_POLL_TIMEOUT", "600"))
 POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "15"))
+
+# The core, the metapaas CP and every s3 node share a single CI runner, so the
+# core API blips under load: a request comes back 401 because IAM did not
+# answer in time, and the token refresh that follows comes back 502.  None of
+# that means the instance being polled is unhealthy.
+TRANSIENT_API_ERRORS = (bazooka_exc.BaseHTTPException, requests.RequestException)
+AUTH_ATTEMPTS = 5
+AUTH_RETRY_INTERVAL = 5
 
 S3_INSTANCES = "/v1/types/s3/instances/"
 S3_VERSIONS = "/v1/types/s3/versions/"
@@ -64,6 +74,36 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
         "refresh_token": None,
         "scope": scope,
     }
+
+
+class ResilientCoreIamAuthenticator(http_client.CoreIamAuthenticator):
+    """A CoreIamAuthenticator that survives a blip in the core IAM API.
+
+    Upstream falls back from the refresh-token grant to the password grant
+    only on 400; anything else -- a 502 from an IAM busy reconciling a node --
+    propagates out of ``authenticate()`` and poisons the client for the rest
+    of the session.  Retry instead: the tests hold a username and a password,
+    so a fresh password grant is always available.
+    """
+
+    def authenticate(self) -> None:
+        for attempt in range(1, AUTH_ATTEMPTS + 1):
+            try:
+                super().authenticate()
+                return
+            except TRANSIENT_API_ERRORS as exc:
+                if attempt == AUTH_ATTEMPTS:
+                    raise
+                LOG.warning(
+                    "Authentication attempt %s/%s failed: %s",
+                    attempt,
+                    AUTH_ATTEMPTS,
+                    exc,
+                )
+                # Whatever the cause, the refresh token is the part that can
+                # be stale, so drop it and let the retry use the password.
+                self._refresh_token = None
+                time.sleep(AUTH_RETRY_INTERVAL)
 
 
 # --- Core client fixture ---
@@ -169,7 +209,7 @@ def s3_api_client(
     s3_scope = http_client.CoreIamAuthenticator.project_scope(
         sys_uuid.UUID(test_user_project["uuid"])
     )
-    core_auth = http_client.CoreIamAuthenticator(
+    core_auth = ResilientCoreIamAuthenticator(
         base_url=EXORDOS_ENDPOINT,
         username=test_user["username"],
         password=test_user["password"],
@@ -229,17 +269,31 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
 def _poll_instance_status(client, instance_uuid, target_status, timeout, interval):
     deadline = time.monotonic() + timeout
     last_status = ""
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
-        instance = client.get(S3_INSTANCES, uuid=instance_uuid)
+        try:
+            instance = client.get(S3_INSTANCES, uuid=instance_uuid)
+        except TRANSIENT_API_ERRORS as exc:
+            # This fixture is session-scoped: one unlucky request would fail
+            # every test in the run.  Keep polling until the deadline and
+            # report the error only if the API never comes back.
+            last_error = exc
+            LOG.warning("Polling instance %s failed: %s", instance_uuid, exc)
+            time.sleep(interval)
+            continue
+        last_error = None
         last_status = instance.get("status", "")
         if last_status == target_status:
             return instance
         if last_status in ("ERROR", "CREATE_FAILED", "DELETE_FAILED"):
             pytest.fail(f"Instance entered terminal status: {last_status}")
         time.sleep(interval)
+    detail = f"last status: {last_status or 'unknown'}"
+    if last_error is not None:
+        detail += f", last error: {last_error}"
     pytest.fail(
         f"Instance {instance_uuid} did not reach {target_status} "
-        f"within {timeout}s (last: {last_status})"
+        f"within {timeout}s ({detail})"
     )
 
 
