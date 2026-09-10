@@ -7,16 +7,11 @@ on:
 
 env:
   PACKER_VERSION: "1.9.2"
-  PYTHON_VERSION: "3.12"
   TOX_ENV: "py312"
   CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
   S3_URL: http://10.20.0.2:80/api/metapaas
   CORE_USERNAME: "admin"
   CORE_PASSWORD: "admin"
-  # Address the CI VMs reach the artifact server (run by prepare_env.py on the
-  # runner) at: 10.20.0.1 is the hypervisor host on the bootstrapped core CIDR.
-  ARTIFACTS_HOST: "10.20.0.1"
-  ARTIFACTS_PORT: "8081"
   ELEMENT_DEPS: "metapaas"
   ELEMENT_NAME: s3aas
 
@@ -49,8 +44,7 @@ jobs:
           exordos push -c exordos/exordos.push.yaml -t local -f --latest
 
   # End-to-end run: a throwaway core on a GitHub runner, the element built from
-  # this commit installed into it, then the functional suite. prepare_env.py
-  # owns the whole environment setup so the same command works locally.
+  # this commit installed into it, then the functional suite.
   E2E:
     runs-on: ubuntu-24.04
     needs: Build
@@ -131,34 +125,10 @@ jobs:
           done
 
           exordos e e show $ELEMENT_NAME
-      #- name: Set up Python ${{ env.PYTHON_VERSION }}
-      #  uses: actions/setup-python@v7
-      #  with:
-      #    python-version: ${{ env.PYTHON_VERSION }}
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Install tox-uv
         run: uv tool install tox --with tox-uv
-      #- name: Pip install build
-      #  run: pip install build
-      # Builds the wheel and the element, serves both over HTTP, installs
-      # metapaas + s3aas and waits until the s3 API answers.
-      #- name: Prepare test environment
-        # The metapaas image is pulled from repo.exordos.com into the core, so
-        # its element takes tens of minutes to reconcile on a GitHub runner.
-      #  timeout-minutes: 80
-      #  run: |
-      #    set -euo pipefail
-      #    python exordos_s3/tests/functional/prepare_env.py \
-      #      --output-dir /tmp/s3aas-build \
-      #      --http-host "$ARTIFACTS_HOST" \
-      #     --http-port "$ARTIFACTS_PORT" \
-      #      --endpoint "$CORE_ENDPOINT_URL" \
-      #      --username "$CORE_USERNAME" \
-      #      --password "$CORE_PASSWORD" \
-      #      --wait-timeout 1800 \
-      #      2>&1 | tee /tmp/prepare_env.log
-      #    sed -n 's/^  export //p' /tmp/prepare_env.log >> $GITHUB_ENV
 
       - name: Run functional tests
         run: |
