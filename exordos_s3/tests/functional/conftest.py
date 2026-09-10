@@ -44,6 +44,9 @@ POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "5"))
 # flip.
 SYNC_TIMEOUT = int(os.environ.get("EXORDOS_SYNC_TIMEOUT", "60"))
 SYNC_INTERVAL = 1
+# Convergence normally takes about a second, so anything above this is worth
+# a line in the log even when the wait does eventually succeed.
+SLOW_SYNC = 10
 
 # The core, the metapaas CP and every s3 node share a single CI runner, so the
 # core API blips under load: a request comes back 401 because IAM did not
@@ -526,7 +529,8 @@ def wait_for_bucket(
     s3_client, bucket_name, present=True, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL
 ):
     """Wait until the bucket does (or no longer does) exist on the dataplane."""
-    deadline = time.monotonic() + timeout
+    start = time.monotonic()
+    deadline = start + timeout
     last_error = ""
     while True:
         try:
@@ -541,6 +545,13 @@ def wait_for_bucket(
         except botocore.exceptions.EndpointConnectionError as e:
             last_error, found = str(e), False
         if found == present:
+            if time.monotonic() - start > SLOW_SYNC:
+                LOG.warning(
+                    "Bucket %s took %ds to %s on the dataplane",
+                    bucket_name,
+                    round(time.monotonic() - start),
+                    "appear" if present else "disappear",
+                )
             return
         if time.monotonic() >= deadline:
             state = "appear" if present else "disappear"
@@ -595,9 +606,15 @@ def make_s3_client(s3_endpoint, access_key, secret_key):
 
 
 def create_bucket_via_api(
-    s3_api_client, instance_uuid, name, project_id, s3_client, **kwargs
+    s3_api_client, instance_uuid, name, project_id, s3_client=None, **kwargs
 ):
-    """Create a bucket and return once the dataplane serves it."""
+    """Create a bucket via the CP API.
+
+    Pass the client the test is about to use and this returns only once the
+    dataplane serves the bucket.  Tests that never leave the CP API -- the
+    read-only field ones -- omit it and do not wait for a dataplane they are
+    not going to talk to.
+    """
     collection = f"{S3_INSTANCES}{instance_uuid}/buckets/"
     data = {
         "name": name,
@@ -606,7 +623,8 @@ def create_bucket_via_api(
         **kwargs,
     }
     result = s3_api_client.create(collection, data=data)
-    wait_for_bucket(s3_client, name)
+    if s3_client is not None:
+        wait_for_bucket(s3_client, name)
     return result
 
 

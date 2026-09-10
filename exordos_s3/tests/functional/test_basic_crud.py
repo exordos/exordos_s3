@@ -280,11 +280,11 @@ class TestBucketROFields:
     """Read-only bucket fields cannot be updated via CP API."""
 
     def test_bucket_name_read_only(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
+        self, s3_api_client, s3_instance_uuid, s3_project_id
     ):
         bucket_name = f"test-ro-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id
         )
 
         # Attempt to update name should fail or be ignored
@@ -293,7 +293,7 @@ class TestBucketROFields:
             s3_api_client.update(collection, uuid=bucket["uuid"], name="new-name")
 
     def test_versioning_enabled_read_only(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
+        self, s3_api_client, s3_instance_uuid, s3_project_id
     ):
         bucket_name = f"test-rover-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -301,7 +301,6 @@ class TestBucketROFields:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_probe_client,
             versioning_enabled=False,
         )
 
