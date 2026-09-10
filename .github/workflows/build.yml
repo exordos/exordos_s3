@@ -6,7 +6,6 @@ on:
     types: [opened]
 
 env:
-  PACKER_VERSION: "1.9.2"
   TOX_ENV: "py312"
   CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
   S3_URL: http://10.20.0.2:80/api/metapaas
@@ -18,9 +17,7 @@ env:
 jobs:
   Build:
     runs-on: [self-hosted, vm]
-    if : ${{ github.actor != 'dependabot[bot]' }}
-    strategy:
-      fail-fast: true
+    if: ${{ github.actor != 'dependabot[bot]' }}
     outputs:
       s3aas_version: ${{ steps.build_element.outputs.s3aas_version }}
     steps:
@@ -55,10 +52,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Setup packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
       - name: Install exordos CLI
         run: curl -fsSL https://repo.exordos.com/install.sh | sudo sh
       - name: Install hypervisor
@@ -107,7 +100,7 @@ jobs:
           # metapaas CP and the s3 dataplane both fit.
           HYPER_UUID="$(exordos c h l -o json | jq -r '.[0].uuid')"
           exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
-      - name: Preload dependencies in background
+      - name: Install element dependencies
         run: |
           for dep in $ELEMENT_DEPS; do
             exordos e elements install $dep
