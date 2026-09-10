@@ -208,10 +208,6 @@ class TestS3DataOperations:
 class TestQuotaEnforcement:
     """Uploading beyond quota_bytes should fail."""
 
-    @pytest.mark.skipif(
-        False,
-        reason="RustFS does not enforce quota_bytes yet",
-    )
     def test_upload_beyond_quota_denied(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
     ):
@@ -245,10 +241,7 @@ class TestObjectLockRetention:
     is added.
     """
 
-    @pytest.mark.skipif(
-        True,
-        reason="RustFS does not enforce object lock retention yet",
-    )
+    @pytest.mark.skip(reason="RustFS does not enforce object lock retention yet")
     def test_retention_prevents_delete(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
     ):
