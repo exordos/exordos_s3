@@ -16,7 +16,6 @@
 """Policy enforcement integration tests — verify IAM policies control
 access to buckets as expected."""
 
-import time
 import uuid
 
 import botocore.exceptions
@@ -71,11 +70,16 @@ class TestPolicyAllowsOwnBucket:
     """User with a policy on bucket A can operate on bucket A."""
 
     def test_put_get_delete_allowed(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"pol-own-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         # Create user + policy + key
@@ -111,15 +115,20 @@ class TestPolicyDeniesOtherBucket:
     """User with a policy on bucket A cannot access bucket B."""
 
     def test_access_denied_on_unauthorized_bucket(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_a = f"pol-a-{uuid.uuid4().hex[:8]}"
         bucket_b = f"pol-b-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_a, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_a, s3_project_id, s3_probe_client
         )
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_b, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_b, s3_project_id, s3_probe_client
         )
 
         # User has policy on bucket_a only
@@ -168,11 +177,16 @@ class TestReadOnlyPolicy:
     """User with read-only policy cannot write or delete."""
 
     def test_readonly_cannot_write(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"pol-ro-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
@@ -219,15 +233,20 @@ class TestSeparateUserAccess:
     """Two users with separate policies cannot access each other's buckets."""
 
     def test_cross_user_isolation(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_x = f"pol-x-{uuid.uuid4().hex[:8]}"
         bucket_y = f"pol-y-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_x, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_x, s3_project_id, s3_probe_client
         )
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_y, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_y, s3_project_id, s3_probe_client
         )
 
         # User X has access to bucket_x
@@ -307,11 +326,16 @@ class TestDetachPolicy:
     """Detaching a policy from a user revokes the access it granted."""
 
     def test_detach_revokes_access(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"pol-detach-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
@@ -344,13 +368,11 @@ class TestDetachPolicy:
         )
         s3_api_client.delete(policies_collection, uuid=attachment["uuid"])
 
-        # Wait for dataplane sync
-        time.sleep(10)
-
-        # Access should now be denied
-        with pytest.raises(botocore.exceptions.ClientError) as exc_info:
-            client.put_object(Bucket=bucket_name, Key="obj2", Body=b"nope")
-        assert exc_info.value.response["Error"]["Code"] in (
+        # Access should be denied once the dataplane catches up
+        error = s3_conftest.wait_until_denied(
+            lambda: client.put_object(Bucket=bucket_name, Key="obj2", Body=b"nope")
+        )
+        assert error.response["Error"]["Code"] in (
             "AccessDenied",
             "AllAccessDisabled",
         )
@@ -360,11 +382,16 @@ class TestPolicyDeletion:
     """Deleting a policy revokes access for all attached users."""
 
     def test_delete_policy_revokes_access(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"pol-del-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
@@ -394,13 +421,11 @@ class TestPolicyDeletion:
         policies_collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/policies/"
         s3_api_client.delete(policies_collection, uuid=policy["uuid"])
 
-        # Wait for dataplane sync
-        time.sleep(10)
-
-        # Access should now be denied
-        with pytest.raises(botocore.exceptions.ClientError) as exc_info:
-            client.put_object(Bucket=bucket_name, Key="obj2", Body=b"nope")
-        assert exc_info.value.response["Error"]["Code"] in (
+        # Access should be denied once the dataplane catches up
+        error = s3_conftest.wait_until_denied(
+            lambda: client.put_object(Bucket=bucket_name, Key="obj2", Body=b"nope")
+        )
+        assert error.response["Error"]["Code"] in (
             "AccessDenied",
             "AllAccessDisabled",
         )
@@ -410,15 +435,20 @@ class TestMultiplePoliciesPerUser:
     """A user with multiple policies gets cumulative access."""
 
     def test_cumulative_access(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_a = f"pol-ma-{uuid.uuid4().hex[:8]}"
         bucket_b = f"pol-mb-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_a, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_a, s3_project_id, s3_probe_client
         )
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_b, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_b, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(

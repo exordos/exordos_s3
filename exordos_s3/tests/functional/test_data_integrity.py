@@ -16,7 +16,6 @@
 """Data integrity tests — verify that updating bucket or policy settings
 does not cause data loss."""
 
-import time
 import uuid
 
 import botocore.exceptions
@@ -29,7 +28,7 @@ class TestBucketUpdatePreservesData:
     """Updating bucket settings should not delete existing objects."""
 
     def test_toggle_public_preserves_objects(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"int-pub-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -37,13 +36,13 @@ class TestBucketUpdatePreservesData:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             public=False,
         )
         bucket_uuid = bucket["uuid"]
 
         # Upload data
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         content = b"survive-the-update"
         s3_conftest.upload_test_object(client, bucket_name, "precious", content)
 
@@ -63,7 +62,7 @@ class TestBucketUpdatePreservesData:
         assert downloaded == content
 
     def test_quota_update_preserves_objects(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_clients, s3_endpoint
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         bucket_name = f"int-quota-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
@@ -71,13 +70,13 @@ class TestBucketUpdatePreservesData:
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
-            s3_endpoint,
+            s3_probe_client,
             quota_bytes=0,
         )
         bucket_uuid = bucket["uuid"]
 
         # Upload data
-        client = next(iter(s3_clients.values()))
+        client = s3_probe_client
         content = b"survive-quota-update"
         s3_conftest.upload_test_object(client, bucket_name, "data", content)
 
@@ -95,11 +94,16 @@ class TestPolicyUpdatePreservesAccess:
     access patterns."""
 
     def test_add_permission_to_policy(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"int-pol-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         # Create user with read-only policy
@@ -166,10 +170,11 @@ class TestPolicyUpdatePreservesAccess:
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/policies/"
         s3_api_client.update(collection, uuid=policy["uuid"], content=readwrite_policy)
 
-        # Wait for dataplane sync (policy update needs time to propagate)
-        time.sleep(10)
-
-        # Now PutObject should succeed
-        client.put_object(Bucket=bucket_name, Key="obj", Body=b"now-allowed")
+        # PutObject starts working once the dataplane catches up
+        s3_conftest.wait_until_allowed(
+            lambda: client.put_object(
+                Bucket=bucket_name, Key="obj", Body=b"now-allowed"
+            )
+        )
         resp = client.get_object(Bucket=bucket_name, Key="obj")
         assert resp["Body"].read() == b"now-allowed"

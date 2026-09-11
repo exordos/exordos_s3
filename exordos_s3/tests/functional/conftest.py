@@ -5,12 +5,14 @@ import os
 import time
 import uuid as sys_uuid
 
+from bazooka import exceptions as bazooka_exc
 import boto3
 import botocore.config
 import botocore.exceptions
 from exordos.clients import base_client
 from gcl_sdk.clients.http import base as http_client
 import pytest
+import requests
 
 LOG = logging.getLogger(__name__)
 
@@ -25,12 +27,6 @@ METAPAAS_PROJECT_ID = os.environ.get(
     "METAPAAS_PROJECT_ID", "4d657461-0000-0000-0000-000000000002"
 )
 
-# Metapaas service account — has owner role in the metapaas project.
-# Needed to query S3 versions which are scoped to the metapaas project.
-# Defaults to the well-known metapaas IAM user; override via env vars.
-METAPAAS_USERNAME = os.environ.get("METAPAAS_USERNAME", "metapaas")
-METAPAAS_PASSWORD = os.environ.get("METAPAAS_PASSWORD", "")
-
 # S3 CP URL — metapaas user-api on metapaas-cp node (port 8080)
 # Can be overridden; otherwise resolved from the metapaas-cp compute node.
 EXORDOS_S3_CP_URL = os.environ.get("EXORDOS_S3_CP_URL", "")
@@ -39,7 +35,26 @@ EXORDOS_S3_CP_URL = os.environ.get("EXORDOS_S3_CP_URL", "")
 EXORDOS_S3_ENDPOINT = os.environ.get("EXORDOS_S3_ENDPOINT", "")
 
 POLL_TIMEOUT = int(os.environ.get("EXORDOS_POLL_TIMEOUT", "600"))
-POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "15"))
+POLL_INTERVAL = int(os.environ.get("EXORDOS_POLL_INTERVAL", "5"))
+
+# A change accepted by the CP API reaches the dataplane a moment later: a new
+# bucket shows up in RustFS, a deleted key stops being accepted.  Poll for the
+# effect rather than sleeping a flat ten seconds -- on a quiet runner it lands
+# in about a second, and a busy one gets the whole timeout instead of a coin
+# flip.
+SYNC_TIMEOUT = int(os.environ.get("EXORDOS_SYNC_TIMEOUT", "60"))
+SYNC_INTERVAL = 1
+# Convergence normally takes about a second, so anything above this is worth
+# a line in the log even when the wait does eventually succeed.
+SLOW_SYNC = 10
+
+# The core, the metapaas CP and every s3 node share a single CI runner, so the
+# core API blips under load: a request comes back 401 because IAM did not
+# answer in time, and the token refresh that follows comes back 502.  None of
+# that means the instance being polled is unhealthy.
+TRANSIENT_API_ERRORS = (bazooka_exc.BaseHTTPException, requests.RequestException)
+AUTH_ATTEMPTS = 5
+AUTH_RETRY_INTERVAL = 5
 
 S3_INSTANCES = "/v1/types/s3/instances/"
 S3_VERSIONS = "/v1/types/s3/versions/"
@@ -70,6 +85,36 @@ def _get_auth_data(endpoint: str | None = None, project_id: str | None = None) -
         "refresh_token": None,
         "scope": scope,
     }
+
+
+class ResilientCoreIamAuthenticator(http_client.CoreIamAuthenticator):
+    """A CoreIamAuthenticator that survives a blip in the core IAM API.
+
+    Upstream falls back from the refresh-token grant to the password grant
+    only on 400; anything else -- a 502 from an IAM busy reconciling a node --
+    propagates out of ``authenticate()`` and poisons the client for the rest
+    of the session.  Retry instead: the tests hold a username and a password,
+    so a fresh password grant is always available.
+    """
+
+    def authenticate(self) -> None:
+        for attempt in range(1, AUTH_ATTEMPTS + 1):
+            try:
+                super().authenticate()
+                return
+            except TRANSIENT_API_ERRORS as exc:
+                if attempt == AUTH_ATTEMPTS:
+                    raise
+                LOG.warning(
+                    "Authentication attempt %s/%s failed: %s",
+                    attempt,
+                    AUTH_ATTEMPTS,
+                    exc,
+                )
+                # Whatever the cause, the refresh token is the part that can
+                # be stale, so drop it and let the retry use the password.
+                self._refresh_token = None
+                time.sleep(AUTH_RETRY_INTERVAL)
 
 
 # --- Core client fixture ---
@@ -109,28 +154,6 @@ def s3_cp_ip(core_client) -> str:
     if not ip:
         pytest.skip("metapaas-cp node has no IP yet")
     return ip
-
-
-# --- Metapaas admin client (for reading versions from metapaas project) ---
-
-
-@pytest.fixture(scope="session")
-def metapaas_admin_client(s3_cp_ip) -> http_client.CollectionBaseClient:
-    """Admin S3 API client scoped to the metapaas project.
-
-    Used to query S3 versions which live in the metapaas project.
-    """
-    cp_url = EXORDOS_S3_CP_URL or f"http://{s3_cp_ip}:8080"
-    metapaas_scope = http_client.CoreIamAuthenticator.project_scope(
-        sys_uuid.UUID(METAPAAS_PROJECT_ID)
-    )
-    core_auth = http_client.CoreIamAuthenticator(
-        base_url=EXORDOS_ENDPOINT,
-        username=METAPAAS_USERNAME,
-        password=METAPAAS_PASSWORD,
-        scope=metapaas_scope,
-    )
-    return http_client.CollectionBaseClient(base_url=cp_url, auth=core_auth)
 
 
 # --- Test user and project ---
@@ -197,7 +220,7 @@ def s3_api_client(
     s3_scope = http_client.CoreIamAuthenticator.project_scope(
         sys_uuid.UUID(test_user_project["uuid"])
     )
-    core_auth = http_client.CoreIamAuthenticator(
+    core_auth = ResilientCoreIamAuthenticator(
         base_url=EXORDOS_ENDPOINT,
         username=test_user["username"],
         password=test_user["password"],
@@ -207,13 +230,19 @@ def s3_api_client(
     return http_client.CollectionBaseClient(base_url=cp_url, auth=core_auth)
 
 
-# --- S3 version (from metapaas project via admin) ---
+# --- S3 version (from the metapaas project) ---
 
 
 @pytest.fixture(scope="session")
-def s3_version_uuid(metapaas_admin_client) -> str:
-    """Get the first available S3 version UUID from the metapaas project."""
-    versions = metapaas_admin_client.filter(S3_VERSIONS)
+def s3_version_uuid(s3_api_client) -> str:
+    """Get the first available S3 version UUID from the metapaas project.
+
+    The versions live in the metapaas project, which is the project the test
+    user is scoped to and owns — the same owner role that carries every other
+    s3 permission also carries s3_version_read, so no separate service
+    account (and no reading of its generated password) is needed.
+    """
+    versions = s3_api_client.filter(S3_VERSIONS)
     if not versions:
         pytest.skip("No S3 versions registered — is s3aas element installed?")
     return versions[0]["uuid"]
@@ -239,6 +268,9 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
     }
     instance = s3_api_client.create(S3_INSTANCES, data=data)
     instance_uuid = instance["uuid"]
+    LOG.info(
+        "Created s3 instance %s (%s), waiting for ACTIVE", instance_name, instance_uuid
+    )
     yield _poll_instance_status(
         s3_api_client, instance_uuid, "ACTIVE", POLL_TIMEOUT, POLL_INTERVAL
     )
@@ -249,19 +281,47 @@ def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
 
 
 def _poll_instance_status(client, instance_uuid, target_status, timeout, interval):
-    deadline = time.monotonic() + timeout
+    start = last_report = time.monotonic()
+    deadline = start + timeout
     last_status = ""
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
-        instance = client.get(S3_INSTANCES, uuid=instance_uuid)
-        last_status = instance.get("status", "")
+        try:
+            instance = client.get(S3_INSTANCES, uuid=instance_uuid)
+        except TRANSIENT_API_ERRORS as exc:
+            # This fixture is session-scoped: one unlucky request would fail
+            # every test in the run.  Keep polling until the deadline and
+            # report the error only if the API never comes back.
+            last_error = exc
+            LOG.warning("Polling instance %s failed: %s", instance_uuid, exc)
+            time.sleep(interval)
+            continue
+        last_error = None
+        status = instance.get("status", "")
+        elapsed = round(time.monotonic() - start)
+        # A status change is news; otherwise say something every half minute
+        # so a run that takes minutes does not look like a hung one.
+        if status != last_status or time.monotonic() - last_report >= 30:
+            LOG.info("Instance %s is %s after %ds", instance_uuid, status, elapsed)
+            last_report = time.monotonic()
+        last_status = status
         if last_status == target_status:
+            LOG.info(
+                "Instance %s reached %s after %ds",
+                instance_uuid,
+                target_status,
+                elapsed,
+            )
             return instance
         if last_status in ("ERROR", "CREATE_FAILED", "DELETE_FAILED"):
             pytest.fail(f"Instance entered terminal status: {last_status}")
         time.sleep(interval)
+    detail = f"last status: {last_status or 'unknown'}"
+    if last_error is not None:
+        detail += f", last error: {last_error}"
     pytest.fail(
         f"Instance {instance_uuid} did not reach {target_status} "
-        f"within {timeout}s (last: {last_status})"
+        f"within {timeout}s ({detail})"
     )
 
 
@@ -396,6 +456,17 @@ def s3_clients(access_keys_with_secrets, s3_endpoint) -> dict[str, boto3.client]
     return clients
 
 
+@pytest.fixture(scope="session")
+def s3_probe_client(s3_clients) -> boto3.client:
+    """The session user's client, used to watch the dataplane catch up.
+
+    Its policy allows everything on every bucket, so it can see whatever the
+    tests create -- including buckets that belong to a user the test has not
+    built yet.
+    """
+    return next(iter(s3_clients.values()))
+
+
 # --- Helper utilities ---
 
 
@@ -418,7 +489,7 @@ def _generate_test_secret_key() -> str:
 
 
 def _wait_for_access_key_sync(
-    s3_endpoint, access_key, secret_key, timeout=120, interval=3
+    s3_endpoint, access_key, secret_key, timeout=120, interval=SYNC_INTERVAL
 ):
     client = boto3.client(
         "s3",
@@ -454,35 +525,70 @@ def _wait_for_access_key_sync(
     raise TimeoutError(f"Access key {access_key} not synced within {timeout}s")
 
 
-def _wait_for_bucket_sync(
-    s3_endpoint, bucket_name, access_key, secret_key, timeout=60, interval=2
+def wait_for_bucket(
+    s3_client, bucket_name, present=True, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL
 ):
-    client = boto3.client(
-        "s3",
-        endpoint_url=f"http://{s3_endpoint}",
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name="us-east-1",
-        config=botocore.config.Config(
-            signature_version="s3v4",
-            retries={"max_attempts": 3, "mode": "standard"},
-        ),
-    )
-    start = time.time()
-    while time.time() - start < timeout:
+    """Wait until the bucket does (or no longer does) exist on the dataplane."""
+    start = time.monotonic()
+    deadline = start + timeout
+    last_error = ""
+    while True:
         try:
-            client.head_bucket(Bucket=bucket_name)
-            return
+            s3_client.head_bucket(Bucket=bucket_name)
+            found, last_error = True, ""
         except botocore.exceptions.ClientError as e:
-            code = e.response.get("Error", {}).get("Code", "")
-            if code in ("NoSuchBucket", "404", "InvalidAccessKeyId", ""):
-                time.sleep(interval)
-                continue
-            raise
-        except botocore.exceptions.EndpointConnectionError:
+            # A bucket that is not there yet answers 404; a key the dataplane
+            # has not learned about yet answers 403 or InvalidAccessKeyId.
+            # Either way it is not serving this bucket.
+            last_error = e.response.get("Error", {}).get("Code", "")
+            found = False
+        except botocore.exceptions.EndpointConnectionError as e:
+            last_error, found = str(e), False
+        if found == present:
+            if time.monotonic() - start > SLOW_SYNC:
+                LOG.warning(
+                    "Bucket %s took %ds to %s on the dataplane",
+                    bucket_name,
+                    round(time.monotonic() - start),
+                    "appear" if present else "disappear",
+                )
+            return
+        if time.monotonic() >= deadline:
+            state = "appear" if present else "disappear"
+            detail = f" (last error: {last_error})" if last_error else ""
+            raise TimeoutError(
+                f"Bucket {bucket_name} did not {state} within {timeout}s{detail}"
+            )
+        time.sleep(interval)
+
+
+def wait_until_denied(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
+    """Wait until an S3 operation starts failing, and return the error.
+
+    A revocation -- a deleted key, a detached policy -- reaches the dataplane
+    after the CP API has confirmed it, so the call keeps working for a moment.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            operation()
+        except botocore.exceptions.ClientError as e:
+            return e
+        if time.monotonic() >= deadline:
+            pytest.fail(f"Operation was still permitted after {timeout}s")
+        time.sleep(interval)
+
+
+def wait_until_allowed(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
+    """Wait until an S3 operation starts succeeding, and return its result."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return operation()
+        except botocore.exceptions.ClientError:
+            if time.monotonic() >= deadline:
+                raise
             time.sleep(interval)
-            continue
-    raise TimeoutError(f"Bucket {bucket_name} not synced within {timeout}s")
 
 
 def make_s3_client(s3_endpoint, access_key, secret_key):
@@ -500,8 +606,15 @@ def make_s3_client(s3_endpoint, access_key, secret_key):
 
 
 def create_bucket_via_api(
-    s3_api_client, instance_uuid, name, project_id, s3_endpoint, **kwargs
+    s3_api_client, instance_uuid, name, project_id, s3_client=None, **kwargs
 ):
+    """Create a bucket via the CP API.
+
+    Pass the client the test is about to use and this returns only once the
+    dataplane serves the bucket.  Tests that never leave the CP API -- the
+    read-only field ones -- omit it and do not wait for a dataplane they are
+    not going to talk to.
+    """
     collection = f"{S3_INSTANCES}{instance_uuid}/buckets/"
     data = {
         "name": name,
@@ -510,7 +623,8 @@ def create_bucket_via_api(
         **kwargs,
     }
     result = s3_api_client.create(collection, data=data)
-    time.sleep(10)
+    if s3_client is not None:
+        wait_for_bucket(s3_client, name)
     return result
 
 
@@ -564,10 +678,5 @@ def create_access_key_via_api(
     }
     result = s3_api_client.create(collection, data=data)
     result["secret_key"] = result.get("secret_key", secret_key)
-    try:
-        _wait_for_access_key_sync(
-            s3_endpoint, result["access_key"], result["secret_key"]
-        )
-    except TimeoutError:
-        time.sleep(10)
+    _wait_for_access_key_sync(s3_endpoint, result["access_key"], result["secret_key"])
     return result

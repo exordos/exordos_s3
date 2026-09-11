@@ -176,34 +176,28 @@ make typecheck # mypy
 Requires live exordos_core + exordos_metapaas deployment:
 
 ```bash
-EXORDOS_ENDPOINT=http://10.20.0.2:11010 \
+EXORDOS_ENDPOINT=http://10.20.0.2:80/api/core \
 EXORDOS_USERNAME=admin \
 EXORDOS_PASSWORD=<pass> \
-METAPAAS_USERNAME=metapaas \
-METAPAAS_PASSWORD=<pass> \
-EXORDOS_S3_CP_URL=http://10.20.0.X:8080 \
+EXORDOS_S3_CP_URL=http://10.20.0.2:80/api/metapaas \
 make functional
 ```
 
-Or use the E2E preparation script:
+To build that environment from scratch — what the `build` workflow does on a
+throwaway runner:
 
 ```bash
-python exordos_paas_s3/tests/functional/prepare_env.py \
-  --metapaas-dir ../exordos_metapaas \
-  --project-dir . \
-  --output-dir /tmp/s3-build \
-  --endpoint http://10.20.0.2:11010 \
-  --username admin \
-  --password <admin-pass> \
-  --wait-timeout 600
+exordos compute hypervisors init --connection-uri qemu+tcp://10.20.0.1/system
+exordos bootstrap -i latest -f -m core --pool-agent-placement local \
+  --admin-password <admin-pass> --cidr 10.20.0.0/22
+exordos e e install metapaas
+exordos e e install s3aas          # add -v <version> to pin a build
 ```
 
-This script:
-1. Builds s3aas + metapaas elements
-2. Serves them via HTTP
-3. Installs both to running exordos_core
-4. Outputs environment variables for tests
-5. Waits for all nodes ACTIVE
+Wait for both elements to report `ACTIVE` (`exordos ee l -o json -f name=s3aas`)
+and the suite has everything it needs.  To test a build of this working tree
+rather than the published element, `make build` it and `exordos push` it to a
+repository the core can reach first.
 
 ## Architecture
 

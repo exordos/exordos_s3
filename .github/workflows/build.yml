@@ -6,150 +6,189 @@ on:
     types: [opened]
 
 env:
-  PACKER_VERSION: "1.9.2"
-  PYTHON_VERSION: "3.12"
+  TOX_ENV: "py312"
   CORE_ENDPOINT_URL: http://10.20.0.2:80/api/core
+  S3_URL: http://10.20.0.2:80/api/metapaas
   CORE_USERNAME: "admin"
   CORE_PASSWORD: "admin"
-  NGINX_URL: "http://10.20.0.1:8081"
+  ELEMENT_DEPS: "metapaas"
+  ELEMENT_NAME: s3aas
 
 jobs:
   Build:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, vm]
     if: ${{ github.actor != 'dependabot[bot]' }}
+    outputs:
+      s3aas_version: ${{ steps.build_element.outputs.s3aas_version }}
     steps:
-      - name: Setup packer
-        uses: hashicorp/setup-packer@main
-        with:
-          version: ${{ env.PACKER_VERSION }}
-
-      - name: Install exordos CLI
-        run: curl -fsSL https://repo.exordos.com/install.sh | sudo sh
-
-      - name: Install hypervisor
-        run: |
-          sudo exordos compute hypervisors init
-          sudo chmod 666 /dev/kvm
-
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Build Element
+        id: build_element
+        env:
+          PUSH_CFG: ${{ secrets.PUSH_CFG }}
+        run: |
+          set -eux
 
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v7
+          VERSION="$(exordos get-version .)"
+          echo "s3aas_version=${VERSION}" >> $GITHUB_OUTPUT
+
+          exordos build $(pwd)
+
+          # Decode and write the push configuration
+          echo "$PUSH_CFG" | base64 -d > exordos/exordos.push.yaml
+          exordos push -c exordos/exordos.push.yaml -t local -f --latest
+
+  # End-to-end run: a throwaway core on a GitHub runner, the element built from
+  # this commit installed into it, then the functional suite.
+  E2E:
+    runs-on: ubuntu-24.04
+    needs: Build
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    env:
+      S3AAS_VERSION: ${{ needs.Build.outputs.s3aas_version }}
+    steps:
+      - uses: actions/checkout@v7
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          fetch-depth: 0
+      - name: Install exordos CLI
+        run: curl -fsSL https://repo.exordos.com/install.sh | sudo sh
+      - name: Install hypervisor
+        run: |
+          set -eux
 
-      - name: Install uv + tox + build
-        uses: astral-sh/setup-uv@v7
-      - run: |
-          uv tool install tox --with tox-uv
-          pip install build
+          # Prefetch the core artifacts into ~/.cache/exordos while the
+          # hypervisor packages are being installed: both steps are
+          # independent and each takes around half a minute.
+          exordos bootstrap -i latest -m core --download-only > prefetch.log 2>&1 &
+          PREFETCH_PID=$!
 
-      - name: Build exordos_s3
+          sudo exordos compute hypervisors init --connection-uri qemu+tcp://10.20.0.1/system
+          sudo chmod 666 /dev/kvm
+          
+          wait $PREFETCH_PID || { cat prefetch.log; exit 1; }
+          cat prefetch.log
+      - name: Bootstrap exordos_core
         timeout-minutes: 20
         run: |
           set -eux
-          exordos build --output-dir /tmp/s3aas-build $(pwd)
-          VERSION="$(jq -r '.version' /tmp/s3aas-build/exordos-elements/s3aas/*/inventory.json | head -1)"
-          echo "S3AAS_VERSION=${VERSION}" >> $GITHUB_ENV
-          echo "S3AAS_BUILD_DIR=/tmp/s3aas-build" >> $GITHUB_ENV
 
-      - name: Push exordos_s3
-        env:
-          PUSH_EXORDOS_CFG: ${{ secrets.PUSH_EXORDOS_CFG }}
-        run: |
-          echo "$PUSH_EXORDOS_CFG" | base64 -d > exordos/exordos.push.yaml
-          exordos push -c exordos/exordos.push.yaml -e $S3AAS_BUILD_DIR -t exordos_repo -f --latest
-
-      - name: Configure exordos settings
-        run: |
           exordos settings set-realm default --endpoint $CORE_ENDPOINT_URL
           exordos settings set-context default --name default --user $CORE_USERNAME --password $CORE_PASSWORD
+          exordos bootstrap -i latest -f -m core --pool-agent-placement local \
+            --admin-password $CORE_PASSWORD --cidr 10.20.0.0/22
 
-      - name: Bootstrap exordos_core
-        run: exordos bootstrap -i latest -f -m core --admin-password $CORE_PASSWORD --cidr 10.20.0.0/22
-
-      - name: Wait for Exordos Core API
-        run: |
           for i in {1..60}; do
             if exordos ready_api; then
               echo "Exordos Core API is ready"
               break
             fi
+            if [ "$i" -eq 60 ]; then
+              echo "Exordos Core API did not become ready"
+              exit 1
+            fi
             echo "Waiting for Exordos Core API... ($i/60)"
+            sleep 2
+          done
+          
+          .github/scripts/wait-for-element.sh core 600
+
+          # The runner is a single small VM: let the hypervisor overbook so the
+          # metapaas CP and the s3 dataplane both fit.
+          HYPER_UUID="$(exordos c h l -o json | jq -r '.[0].uuid')"
+          exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
+      - name: Install element dependencies
+        run: |
+          for dep in $ELEMENT_DEPS; do
+            exordos e elements install $dep
+          done
+      - name: install s3aas
+        run: |
+          exordos e e install $ELEMENT_NAME -v $S3AAS_VERSION
+      # Both elements reconcile in parallel, so wait for them together.
+      - name: Wait for the elements
+        timeout-minutes: 20
+        run: |
+          set -eux
+
+          for element in $ELEMENT_DEPS $ELEMENT_NAME; do
+            .github/scripts/wait-for-element.sh "$element" 900
+          done
+
+          exordos e e show $ELEMENT_NAME
+      # An ACTIVE s3aas element only means the core finished reconciling it: the
+      # metapaas control plane it registers the s3 type in is a VM that is still
+      # booting, and nginx answers 502 until it does.  The suite's session
+      # fixture opens with this very call, so wait for it here instead of
+      # letting all 33 tests error in setup.
+      - name: Wait for the metapaas control plane
+        timeout-minutes: 15
+        run: |
+          set -eu
+
+          deadline=$((SECONDS + 780))
+          while :; do
+            # Any answer the CP itself produced -- 401 included, this call
+            # is unauthenticated -- means it is up; 5xx is nginx with no
+            # upstream to talk to, and 000 is a refused connection, which curl
+            # both prints and exits non-zero on (so override the code rather
+            # than `|| echo 000`, which would append and yield "000000").
+            code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$S3_URL/v1/types/s3/versions/")" || code=000
+            if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+              echo "metapaas control plane answers ($code)"
+              break
+            fi
+            if [ $SECONDS -ge $deadline ]; then
+              echo "metapaas control plane never answered on $S3_URL (last: $code)" >&2
+              exit 1
+            fi
+            echo "Waiting for the metapaas control plane... ($code)"
             sleep 5
           done
-
-      - name: Set hypervisor with overbooking
-        run: |
-          HYPER_UUID="$(exordos c h l -o json | jq -r .[0]."uuid")"
-          exordos compute hypervisors update $HYPER_UUID --cores-ratio 10.0 --ram-ratio 10.0
-
-      - name: Install requirements
-        run: sudo apt update && sudo apt install --yes libev-dev nginx
-
-      - name: Setup nginx
-        run: |
-          sudo tee /etc/nginx/sites-available/s3aas-ci > /dev/null <<'EOF'
-          server {
-              listen 8081;
-              root /srv/nginx;
-              autoindex on;
-          }
-          EOF
-          sudo ln -sf /etc/nginx/sites-available/s3aas-ci /etc/nginx/sites-enabled/s3aas-ci
-          sudo rm -f /etc/nginx/sites-enabled/default
-          sudo mkdir -p /srv/nginx
-          sudo chown -R "$USER:$USER" /srv/nginx
-          sudo systemctl enable --now nginx
-
-      - name: Populate nginx + build wheel
-        run: |
-          cp -r "$S3AAS_BUILD_DIR/." /srv/nginx/
-          mkdir -p /srv/nginx/simple
-          python -m build --wheel --outdir /srv/nginx/simple/
-
-      - name: Patch manifest for CI
-        run: |
-          MF=/srv/nginx/exordos-elements/s3aas/$S3AAS_VERSION/manifests/s3aas.yaml
-          sed -i 's|index_url: ""|index_url: "'"$NGINX_URL"'/simple/"|' "$MF"
-          sed -i 's|image: "https://repo.exordos.com/exordos-elements/|image: "'"$NGINX_URL"'/exordos-elements/|' "$MF"
-          grep -E 'index_url|image:' "$MF"
-
-      - name: Install elements + wait
-        run: |
-          python exordos_s3/tests/functional/prepare_env.py \
-            --skip-build \
-            --no-http-server \
-            --repository "$NGINX_URL/exordos-elements" \
-            --s3aas-version "$S3AAS_VERSION" \
-            --output-dir /tmp/metapaas-s3-build \
-            --endpoint $CORE_ENDPOINT_URL \
-            --username $CORE_USERNAME \
-            --password "$CORE_PASSWORD" \
-            --wait-timeout 600 \
-            2>&1 | tee /tmp/prepare_env.log
-
-          grep "^  export " /tmp/prepare_env.log | sed 's/^  export //' >> $GITHUB_ENV
-
-      - name: Wait for S3 API
-        run: |
-          for i in {1..30}; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" "${EXORDOS_S3_CP_URL}/v1/" || true)
-            if echo "$CODE" | grep -qE "200|404"; then
-              echo "MetaPaaS user-api ready (HTTP $CODE)"; exit 0
-            fi
-            echo "Waiting ($i/30) for user-api… (got '$CODE')"; sleep 10
-          done
-          exit 1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install tox-uv
+        run: uv tool install tox --with tox-uv
 
       - name: Run functional tests
-        run: tox -e ${{ env.PYTHON_VERSION }}-functional
+        run: |
+          set -eux
+          export EXORDOS_ENDPOINT=$CORE_ENDPOINT_URL
+          export EXORDOS_USERNAME=$CORE_USERNAME
+          export EXORDOS_PASSWORD=$CORE_PASSWORD
+          export EXORDOS_S3_CP_URL=$S3_URL
+          export EXORDOS_POLL_TIMEOUT=1800
+          tox -e ${{ env.TOX_ENV }}-functional
+
+      # The compute agent runs on this runner, so when a node will not come up
+      # the reason is in its journal, not in the core API.
+      - name: Collect hypervisor diagnostics
+        if: failure()
+        run: |
+          set +e
+          echo "===== running services ====="
+          systemctl list-units --type=service --state=running --no-pager
+          echo "===== agent processes ====="
+          ps -ef | grep -iE "agent|libvirtd|qemu-system" | grep -v grep
+          # `exordos compute hypervisors init` sets up a "local universal
+          # agent", whose unit is not named after exordos.
+          echo "===== agent journal ====="
+          sudo journalctl -u '*agent*' --no-pager -n 400
+          echo "===== libvirt journal ====="
+          sudo journalctl -u libvirtd --no-pager -n 100
+          echo "===== domains ====="
+          sudo virsh list --all
+          echo "===== disk / memory ====="
+          df -h /
+          free -m
+          echo "===== image caches ====="
+          sudo ls -lhR /var/lib/exordos 2>/dev/null | head -50
+          ls -lh "$HOME/.cache/exordos" 2>/dev/null
 
       - name: Debug session on failure
         uses: owenthereal/action-upterm@v1
         if: failure()
         with:
           limit-access-to-actor: true
-          wait-timeout-minutes: 30
+          wait-timeout-minutes: 5

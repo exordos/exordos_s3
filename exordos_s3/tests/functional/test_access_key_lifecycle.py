@@ -15,11 +15,8 @@
 #    under the License.
 """Access key lifecycle tests — create, verify access, delete, verify loss."""
 
-import time
 import uuid
 
-import botocore.exceptions
-import pytest
 
 import exordos_s3.tests.functional.conftest as s3_conftest
 
@@ -28,11 +25,16 @@ class TestAccessKeyCreation:
     """New access key inherits user's policies and can access S3."""
 
     def test_new_key_has_user_policies(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"key-test-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         # Create user + policy
@@ -128,11 +130,16 @@ class TestAccessKeyDeletion:
     """Deleted access key immediately loses S3 access."""
 
     def test_deleted_key_loses_access(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"key-del-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
@@ -174,13 +181,11 @@ class TestAccessKeyDeletion:
         )
         s3_api_client.delete(keys_collection, uuid=key["uuid"])
 
-        # Wait for dataplane sync (key deletion needs time to propagate)
-        time.sleep(10)
-
-        # Same credentials should now fail
-        with pytest.raises(botocore.exceptions.ClientError) as exc_info:
-            client.list_objects_v2(Bucket=bucket_name)
-        assert exc_info.value.response["Error"]["Code"] in (
+        # Same credentials should stop working once the dataplane catches up
+        error = s3_conftest.wait_until_denied(
+            lambda: client.list_objects_v2(Bucket=bucket_name)
+        )
+        assert error.response["Error"]["Code"] in (
             "AccessDenied",
             "InvalidAccessKeyId",
             "SignatureDoesNotMatch",
@@ -191,11 +196,16 @@ class TestUserDeletion:
     """Deleting a user cascades to its access keys and policy attachments."""
 
     def test_deleted_user_loses_access(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"key-userdel-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
@@ -235,13 +245,11 @@ class TestUserDeletion:
         users_collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/users/"
         s3_api_client.delete(users_collection, uuid=user["uuid"])
 
-        # Wait for dataplane sync
-        time.sleep(10)
-
-        # Same credentials should now fail
-        with pytest.raises(botocore.exceptions.ClientError) as exc_info:
-            client.list_objects_v2(Bucket=bucket_name)
-        assert exc_info.value.response["Error"]["Code"] in (
+        # Same credentials should stop working once the dataplane catches up
+        error = s3_conftest.wait_until_denied(
+            lambda: client.list_objects_v2(Bucket=bucket_name)
+        )
+        assert error.response["Error"]["Code"] in (
             "AccessDenied",
             "InvalidAccessKeyId",
             "SignatureDoesNotMatch",
@@ -252,11 +260,16 @@ class TestMultipleAccessKeysPerUser:
     """A user can have multiple access keys, all inheriting user policies."""
 
     def test_multiple_keys_both_work(
-        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_endpoint
+        self,
+        s3_api_client,
+        s3_instance_uuid,
+        s3_project_id,
+        s3_endpoint,
+        s3_probe_client,
     ):
         bucket_name = f"key-multi-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
-            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_endpoint
+            s3_api_client, s3_instance_uuid, bucket_name, s3_project_id, s3_probe_client
         )
 
         user = s3_conftest.create_user_via_api(
