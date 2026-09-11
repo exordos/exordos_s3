@@ -92,9 +92,7 @@ jobs:
             sleep 2
           done
           
-          while [ $(exordos ee l -o json -f name=core | jq -r .[0]."status") != "ACTIVE" ]; do
-            sleep 2
-          done
+          .github/scripts/wait-for-element.sh core 600
 
           # The runner is a single small VM: let the hypervisor overbook so the
           # metapaas CP and the s3 dataplane both fit.
@@ -108,16 +106,46 @@ jobs:
       - name: install s3aas
         run: |
           exordos e e install $ELEMENT_NAME -v $S3AAS_VERSION
-      - name: check exordos s3aas
-        timeout-minutes: 10
+      # Both elements reconcile in parallel, so wait for them together.
+      - name: Wait for the elements
+        timeout-minutes: 20
         run: |
           set -eux
 
-          while [ $(exordos ee l -o json -f name=$ELEMENT_NAME | jq -r .[0]."status") != "ACTIVE" ]; do
-            sleep 5
+          for element in $ELEMENT_DEPS $ELEMENT_NAME; do
+            .github/scripts/wait-for-element.sh "$element" 900
           done
 
           exordos e e show $ELEMENT_NAME
+      # An ACTIVE s3aas element only means the core finished reconciling it: the
+      # metapaas control plane it registers the s3 type in is a VM that is still
+      # booting, and nginx answers 502 until it does.  The suite's session
+      # fixture opens with this very call, so wait for it here instead of
+      # letting all 33 tests error in setup.
+      - name: Wait for the metapaas control plane
+        timeout-minutes: 15
+        run: |
+          set -eu
+
+          deadline=$((SECONDS + 780))
+          while :; do
+            # Any answer the CP itself produced -- 401 included, this call
+            # is unauthenticated -- means it is up; 5xx is nginx with no
+            # upstream to talk to, and 000 is a refused connection, which curl
+            # both prints and exits non-zero on (so override the code rather
+            # than `|| echo 000`, which would append and yield "000000").
+            code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$S3_URL/v1/types/s3/versions/")" || code=000
+            if [ "$code" != "000" ] && [ "$code" -lt 500 ]; then
+              echo "metapaas control plane answers ($code)"
+              break
+            fi
+            if [ $SECONDS -ge $deadline ]; then
+              echo "metapaas control plane never answered on $S3_URL (last: $code)" >&2
+              exit 1
+            fi
+            echo "Waiting for the metapaas control plane... ($code)"
+            sleep 5
+          done
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Install tox-uv
