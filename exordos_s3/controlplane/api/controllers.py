@@ -57,7 +57,15 @@ class S3InstanceController(
             fields={
                 "status": {constants.ALL: field_p.Permissions.RO},
                 "ipsv4": {constants.ALL: field_p.Permissions.RO},
-                "kind": {constants.ALL: field_p.Permissions.RO},
+                "kind": {
+                    constants.ALL: field_p.Permissions.RO,
+                    constants.CREATE: field_p.Permissions.RW,
+                },
+                "parity": {
+                    constants.ALL: field_p.Permissions.RO,
+                    constants.CREATE: field_p.Permissions.RW,
+                },
+                "members": {constants.ALL: field_p.Permissions.RO},
                 "root_secret": {constants.ALL: field_p.Permissions.HIDDEN},
             },
         ),
