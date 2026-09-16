@@ -15,8 +15,9 @@ ExecReload=/bin/kill -s SIGHUP $MAINPID
 Restart=always
 RestartSec=10s
 TimeoutStartSec=30s
-TimeoutStopSec=30s
-SendSIGKILL=no
+# RustFS may not act on SIGTERM while it is still starting. Without
+# SIGKILL the leftover process keeps the unit from ever starting again
+TimeoutStopSec=45s
 KillSignal=SIGTERM
 OOMScoreAdjust=-1000
 LimitNOFILE=1048576

@@ -51,6 +51,12 @@ def test_image_install_enables_but_does_not_start_dataplane_agent() -> None:
     ]
 
 
+def test_rustfs_stuck_at_start_can_be_killed() -> None:
+    unit = _unit("exordos-metapaas-rustfs.service")
+
+    assert unit["Service"].get("SendSIGKILL", "yes") != "no"
+
+
 def test_dataplane_agent_waits_for_bootstrap() -> None:
     unit = _unit("exordos-metapaas-s3-agent.service")
 
