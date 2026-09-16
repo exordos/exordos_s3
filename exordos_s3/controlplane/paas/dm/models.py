@@ -40,6 +40,12 @@ class S3InstanceNode(
     users = properties.property(ra_types.Dict())
     policies = properties.property(ra_types.Dict())
     access_keys = properties.property(ra_types.Dict())
+    # Nodes of a distributed instance share one IAM and bucket state, and
+    # only one of them applies the target to it.
+    reconciler = properties.property(ra_types.Boolean(), default=True)
+    # Reported by the node, never sent to it: whether its RustFS serves
+    # requests. Not a target field, so it only changes the full hash.
+    ready = properties.property(ra_types.Boolean(), default=False)
 
     @classmethod
     def get_resource_kind(cls) -> str:
@@ -51,16 +57,20 @@ class S3InstanceNode(
 
         Refer to the Resource model for more details about target fields.
         """
-        return frozenset(
-            (
-                "uuid",
-                "name",
-                "buckets",
-                "users",
-                "policies",
-                "access_keys",
-            )
-        )
+        fields = {
+            "uuid",
+            "name",
+            "buckets",
+            "users",
+            "policies",
+            "access_keys",
+        }
+        # Only the other nodes of a distributed instance carry the flag, so
+        # single node targets keep their hash and agents built before the
+        # field existed never receive it.
+        if not self.reconciler:
+            fields.add("reconciler")
+        return frozenset(fields)
 
 
 class S3Instance(

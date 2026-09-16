@@ -255,8 +255,7 @@ def s3_version_uuid(s3_api_client) -> str:
 def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
     """Create an S3 instance and wait until ACTIVE."""
     instance_name = f"test-int-{sys_uuid.uuid4().hex[:8]}"
-    # 'kind' is a read-only field (defaults to single_node); sending it on
-    # create triggers a FieldPermissionError, so it is intentionally omitted.
+    # 'kind' defaults to single_node.
     data = {
         "name": instance_name,
         "project_id": test_user_project["uuid"],

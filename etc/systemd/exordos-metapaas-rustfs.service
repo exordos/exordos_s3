@@ -10,12 +10,16 @@ AssertPathIsMountPoint=/var/lib/rustfs/data
 Type=notify
 NotifyAccess=main
 EnvironmentFile=/etc/exordos_metapaas/rustfs.env
+# Distributed endpoints are host names; they resolve through /etc/hosts
+ExecStartPre=+/usr/local/bin/exordos-s3-sync-hosts
 ExecStart=/usr/bin/rustfs server ${RUSTFS_VOLUMES}
 ExecReload=/bin/kill -s SIGHUP $MAINPID
 Restart=always
 RestartSec=10s
-TimeoutStartSec=30s
-# RustFS may not act on SIGTERM while it is still starting. Without
+# A cluster node waits for its peers (up to 120s by default) before it
+# reports readiness
+TimeoutStartSec=300s
+# RustFS does not act on SIGTERM while it waits for its peers at start. Without
 # SIGKILL the leftover process keeps the unit from ever starting again
 TimeoutStopSec=45s
 KillSignal=SIGTERM
