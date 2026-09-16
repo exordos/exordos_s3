@@ -16,3 +16,13 @@
 # rustfs environment config (must match the rustfs systemd unit's
 # EnvironmentFile in the dataplane image).
 RUSTFS_ENV_FILE = "/etc/exordos_metapaas/rustfs.env"
+
+RUSTFS_PORT = 9000
+RUSTFS_DATA_DIR = "/var/lib/rustfs/data"
+# Readiness probe of the local node: 200 only once it serves S3 requests
+RUSTFS_READY_URL = f"http://127.0.0.1:{RUSTFS_PORT}/health/ready"
+
+# Nodes of a distributed instance reach each other by these names, resolved
+# through /etc/hosts. RustFS identifies a pool by the literal endpoint string,
+# so the names have to outlive node address changes.
+CLUSTER_HOST_TEMPLATE = "node{ordinal}.rustfs.internal"
