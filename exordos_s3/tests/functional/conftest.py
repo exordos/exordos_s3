@@ -14,6 +14,8 @@ from gcl_sdk.clients.http import base as http_client
 import pytest
 import requests
 
+from exordos_s3 import constants
+
 LOG = logging.getLogger(__name__)
 
 # --- Environment configuration ---
@@ -255,8 +257,7 @@ def s3_version_uuid(s3_api_client) -> str:
 def s3_instance(s3_api_client, s3_version_uuid, test_user_project) -> dict:
     """Create an S3 instance and wait until ACTIVE."""
     instance_name = f"test-int-{sys_uuid.uuid4().hex[:8]}"
-    # 'kind' is a read-only field (defaults to single_node); sending it on
-    # create triggers a FieldPermissionError, so it is intentionally omitted.
+    # 'kind' defaults to single_node.
     data = {
         "name": instance_name,
         "project_id": test_user_project["uuid"],
@@ -345,7 +346,7 @@ def s3_endpoint(s3_instance) -> str:
     ips = s3_instance.get("ipsv4", [])
     if not ips:
         pytest.skip("Instance has no IPs, set EXORDOS_S3_ENDPOINT explicitly")
-    return f"{ips[0]}:9000"
+    return f"{ips[0]}:{constants.RUSTFS_PORT}"
 
 
 @pytest.fixture(scope="session")

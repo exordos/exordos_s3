@@ -23,16 +23,18 @@ from gcl_sdk.agents.universal.dm import models as ua_models
 from gcl_sdk.paas.services import builder
 from restalchemy.storage import exceptions as storage_exceptions
 
+from exordos_s3.controlplane import cluster
 from exordos_s3.controlplane.paas.dm import models
 
 LOG = logging.getLogger(__name__)
-AGENT_UUID5_NAME = "s3aas"
+AGENT_UUID5_NAME = cluster.AGENT_UUID5_NAME
+RECONCILER_ORDINAL = cluster.RECONCILER_ORDINAL
 
 
 class PaaSBuilder(builder.PaaSBuilder):
     @classmethod
     def agent_uuid_by_node(cls, node_uuid: sys_uuid.UUID) -> sys_uuid.UUID:
-        return sys_uuid.uuid5(node_uuid, AGENT_UUID5_NAME)
+        return cluster.agent_uuid_by_node(node_uuid)
 
     def schedule_paas_objects(
         self,
@@ -108,6 +110,18 @@ class S3InstanceBuilder(PaaSBuilder):
                 }
         return result
 
+    @staticmethod
+    def _actualize_cluster_status(instance: models.S3Instance) -> None:
+        try:
+            nodeset = instance.get_actual_nodeset()
+        except storage_exceptions.RecordNotFound:
+            return
+        status = cluster.instance_status(
+            instance.nodes_number, instance.members, nodeset.status, nodeset.nodes
+        )
+        if status is not None:
+            instance.status = status
+
     def create_paas_objects(
         self, instance: models.S3Instance
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
@@ -124,10 +138,37 @@ class S3InstanceBuilder(PaaSBuilder):
         """Basic update, all derivatives are non-unique."""
         actual_resources = []
 
+        # The DP-report and API paths both pass here, so the status follows
+        # RustFS whatever triggered the actualization -- a node changing what
+        # it reports, or a field changed through the API. A NodeSet master
+        # change is covered by the infra builder instead.
+        if instance.is_distributed():
+            self._actualize_cluster_status(instance)
+
         buckets = self._get_buckets(instance)
         policies = self._get_policies(instance)
         users = self._get_users(instance)
         access_keys = self._get_access_keys(instance)
+
+        if instance.is_distributed():
+            # Members are frozen by the infra builder once every node has an
+            # address; until then there is no cluster to configure.
+            members = sorted(
+                instance.members.items(), key=lambda item: item[1]["ordinal"]
+            )
+            return [
+                models.S3InstanceNode(
+                    uuid=PaaSBuilder.agent_uuid_by_node(uuid.UUID(node_uuid)),
+                    name=instance.name,
+                    instance=instance,
+                    buckets=buckets,
+                    users=users,
+                    policies=policies,
+                    access_keys=access_keys,
+                    reconciler=member["ordinal"] == RECONCILER_ORDINAL,
+                )
+                for node_uuid, member in members
+            ]
 
         try:
             nodeset = instance.get_actual_nodeset()

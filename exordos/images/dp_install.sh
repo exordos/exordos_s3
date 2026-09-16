@@ -68,6 +68,7 @@ sudo cp "$GC_PATH/etc/exordos_metapaas/metapaas_s3_agent.conf" $GC_CFG_DIR/
 sudo cp "$GC_PATH/etc/exordos_metapaas/logging.yaml" $GC_CFG_DIR/
 sudo cp "$GC_PATH/exordos/images/dp_bootstrap.sh" $BOOTSTRAP_PATH/0100-metapaas-s3-dp-bootstrap.sh
 sudo chmod +x $BOOTSTRAP_PATH/0100-metapaas-s3-dp-bootstrap.sh
+sudo install -m 0755 "$GC_PATH/exordos/images/sync_hosts.sh" /usr/local/bin/exordos-s3-sync-hosts
 
 cd "$GC_PATH"
 uv sync
