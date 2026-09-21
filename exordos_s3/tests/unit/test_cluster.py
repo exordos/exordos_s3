@@ -14,6 +14,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import typing as tp
 import uuid as sys_uuid
 from unittest import mock
 
@@ -80,10 +81,18 @@ class TestFreezeMembers:
         assert infra_builder.freeze_members(members, nodes, 4) == members
 
 
+INSTANCE_UUID = sys_uuid.UUID("11111111-1111-1111-1111-111111111111")
+PROJECT_ID = sys_uuid.UUID("22222222-2222-2222-2222-222222222222")
+
+
+def _render(*args: tp.Any) -> str:
+    return infra_builder.render_rustfs_env("secret", INSTANCE_UUID, PROJECT_ID, *args)
+
+
 class TestRenderRustfsEnv:
-    def test_single_node_env_is_unchanged(self) -> None:
-        # Existing instances must not see a config change, it restarts RustFS
-        assert infra_builder.render_rustfs_env("secret") == (
+    def test_single_node_env(self) -> None:
+        # Every change of it restarts RustFS on every node of the instance
+        assert _render() == (
             "# RustFS node environment configuration\n"
             "# Managed by Exordos S3 control plane — do not edit manually\n"
             "RUSTFS_ACCESS_KEY=admin\n"
@@ -93,12 +102,31 @@ class TestRenderRustfsEnv:
             "RUSTFS_CONSOLE_ENABLE=true\n"
             "RUSTFS_VOLUMES=/var/lib/rustfs/data\n"
             "RUSTFS_OBS_LOGGER_LEVEL=error\n"
+            "RUSTFS_OBS_ENDPOINT=http://127.0.0.1:8430/opentelemetry\n"
+            "RUSTFS_OBS_TRACES_EXPORT_ENABLED=false\n"
+            "RUSTFS_OBS_LOGS_EXPORT_ENABLED=false\n"
+            "RUSTFS_OBS_LOG_STDOUT_ENABLED=true\n"
+            "OTEL_RESOURCE_ATTRIBUTES="
+            "exordos_s3_instance=11111111-1111-1111-1111-111111111111,"
+            "exordos_project=22222222-2222-2222-2222-222222222222\n"
         )
+
+    def test_distributed_nodes_carry_the_same_labels(self) -> None:
+        members = infra_builder.freeze_members({}, NODES, 4)
+
+        lines = _render(members, 1).splitlines()
+
+        assert "RUSTFS_OBS_ENDPOINT=http://127.0.0.1:8430/opentelemetry" in lines
+        assert (
+            "OTEL_RESOURCE_ATTRIBUTES="
+            "exordos_s3_instance=11111111-1111-1111-1111-111111111111,"
+            "exordos_project=22222222-2222-2222-2222-222222222222"
+        ) in lines
 
     def test_distributed_env(self) -> None:
         members = infra_builder.freeze_members({}, NODES, 4)
 
-        lines = infra_builder.render_rustfs_env("secret", members, 1).splitlines()
+        lines = _render(members, 1).splitlines()
 
         assert (
             "RUSTFS_VOLUMES=http://node{1...4}.rustfs.internal:9000/var/lib/rustfs/data"
@@ -114,7 +142,7 @@ class TestRenderRustfsEnv:
     def test_default_parity_is_left_to_rustfs(self) -> None:
         members = infra_builder.freeze_members({}, NODES, 4)
 
-        env = infra_builder.render_rustfs_env("secret", members)
+        env = _render(members)
 
         assert "RUSTFS_STORAGE_CLASS_STANDARD" not in env
 

@@ -45,6 +45,11 @@ RUSTFS_CONSOLE_ADDRESS=127.0.0.1:9001
 RUSTFS_CONSOLE_ENABLE=true
 RUSTFS_VOLUMES={volumes}
 RUSTFS_OBS_LOGGER_LEVEL=error
+RUSTFS_OBS_ENDPOINT={otlp_endpoint}
+RUSTFS_OBS_TRACES_EXPORT_ENABLED=false
+RUSTFS_OBS_LOGS_EXPORT_ENABLED=false
+RUSTFS_OBS_LOG_STDOUT_ENABLED=true
+OTEL_RESOURCE_ATTRIBUTES={resource_attributes}
 """
 
 RUSTFS_ROOT_USER = "admin"
@@ -90,17 +95,30 @@ def node_addresses(nodes: dict[str, dict]) -> list[str]:
 
 def render_rustfs_env(
     root_secret: str,
+    instance_uuid: sys_uuid.UUID,
+    project_id: sys_uuid.UUID,
     members: dict[str, dict] | None = None,
     parity: int | None = None,
 ) -> str:
-    """Render rustfs.env, the same for every node of an instance."""
+    """Render rustfs.env, the same for every node of an instance.
+
+    RustFS pushes its metrics over OTLP to the vmagent of the base image,
+    which labels every series with the resource attributes. The root endpoint
+    is set rather than the metrics one: with only the latter RustFS also dumps
+    every metric to stdout, and so to the journal on the data disk. Traces and
+    logs stay off, vmagent takes metrics only; logs keep going to stdout.
+    """
+    fields = {
+        "root_user": RUSTFS_ROOT_USER,
+        "root_secret": root_secret,
+        "port": c.RUSTFS_PORT,
+        "otlp_endpoint": c.VMAGENT_OTLP_ENDPOINT,
+        "resource_attributes": (
+            f"exordos_s3_instance={instance_uuid},exordos_project={project_id}"
+        ),
+    }
     if not members:
-        return RUSTFS_CONF_TEMPLATE.format(
-            root_user=RUSTFS_ROOT_USER,
-            root_secret=root_secret,
-            port=c.RUSTFS_PORT,
-            volumes=c.RUSTFS_DATA_DIR,
-        )
+        return RUSTFS_CONF_TEMPLATE.format(volumes=c.RUSTFS_DATA_DIR, **fields)
 
     ordered = sorted(members.values(), key=lambda m: m["ordinal"])
     # A single ellipsis pattern, not a list of hosts: RustFS can only append
@@ -112,12 +130,7 @@ def render_rustfs_env(
         for m in ordered
     )
 
-    content = RUSTFS_CONF_TEMPLATE.format(
-        root_user=RUSTFS_ROOT_USER,
-        root_secret=root_secret,
-        port=c.RUSTFS_PORT,
-        volumes=volumes,
-    )
+    content = RUSTFS_CONF_TEMPLATE.format(volumes=volumes, **fields)
     content += f"EXORDOS_S3_HOSTS={hosts}\n"
     if parity is not None:
         content += f"RUSTFS_STORAGE_CLASS_STANDARD=EC:{parity}\n"
@@ -253,7 +266,13 @@ class CoreInfraBuilder(builder.CoreInfraBuilder):
             ]
             config_nodes = members
 
-        content = render_rustfs_env(instance.root_secret, members, instance.parity)
+        content = render_rustfs_env(
+            instance.root_secret,
+            instance.uuid,
+            instance.project_id,
+            members,
+            instance.parity,
+        )
 
         # Recreate configs for each node
         new_configs = []
