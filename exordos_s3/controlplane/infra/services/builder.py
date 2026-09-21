@@ -45,6 +45,7 @@ RUSTFS_CONSOLE_ADDRESS=127.0.0.1:9001
 RUSTFS_CONSOLE_ENABLE=true
 RUSTFS_VOLUMES={volumes}
 RUSTFS_OBS_LOGGER_LEVEL=error
+RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit
 RUSTFS_OBS_ENDPOINT={otlp_endpoint}
 RUSTFS_OBS_TRACES_EXPORT_ENABLED=false
 RUSTFS_OBS_LOGS_EXPORT_ENABLED=false
@@ -102,8 +103,14 @@ def render_rustfs_env(
 ) -> str:
     """Render rustfs.env, the same for every node of an instance.
 
+    New buckets follow the process-wide durability mode (strict) instead of
+    the relaxed one RustFS 1.0 seeds into them by default: a node can be
+    destroyed rather than shut down, and relaxed leaves object metadata to the
+    page cache.
+
     RustFS pushes its metrics over OTLP to the vmagent of the base image,
-    which labels every series with the resource attributes. The root endpoint
+    which labels every series with the resource attributes; RustFS itself
+    expects rustfs.cluster.id to tell clusters apart in its storage metrics. The root endpoint
     is set rather than the metrics one: with only the latter RustFS also dumps
     every metric to stdout, and so to the journal on the data disk. Traces and
     logs stay off, vmagent takes metrics only; logs keep going to stdout.
@@ -114,6 +121,7 @@ def render_rustfs_env(
         "port": c.RUSTFS_PORT,
         "otlp_endpoint": c.VMAGENT_OTLP_ENDPOINT,
         "resource_attributes": (
+            f"rustfs.cluster.id={instance_uuid},"
             f"exordos_s3_instance={instance_uuid},exordos_project={project_id}"
         ),
     }

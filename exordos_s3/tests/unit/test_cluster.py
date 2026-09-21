@@ -102,11 +102,13 @@ class TestRenderRustfsEnv:
             "RUSTFS_CONSOLE_ENABLE=true\n"
             "RUSTFS_VOLUMES=/var/lib/rustfs/data\n"
             "RUSTFS_OBS_LOGGER_LEVEL=error\n"
+            "RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit\n"
             "RUSTFS_OBS_ENDPOINT=http://127.0.0.1:8430/opentelemetry\n"
             "RUSTFS_OBS_TRACES_EXPORT_ENABLED=false\n"
             "RUSTFS_OBS_LOGS_EXPORT_ENABLED=false\n"
             "RUSTFS_OBS_LOG_STDOUT_ENABLED=true\n"
             "OTEL_RESOURCE_ATTRIBUTES="
+            "rustfs.cluster.id=11111111-1111-1111-1111-111111111111,"
             "exordos_s3_instance=11111111-1111-1111-1111-111111111111,"
             "exordos_project=22222222-2222-2222-2222-222222222222\n"
         )
@@ -119,6 +121,7 @@ class TestRenderRustfsEnv:
         assert "RUSTFS_OBS_ENDPOINT=http://127.0.0.1:8430/opentelemetry" in lines
         assert (
             "OTEL_RESOURCE_ATTRIBUTES="
+            "rustfs.cluster.id=11111111-1111-1111-1111-111111111111,"
             "exordos_s3_instance=11111111-1111-1111-1111-111111111111,"
             "exordos_project=22222222-2222-2222-2222-222222222222"
         ) in lines

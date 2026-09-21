@@ -148,16 +148,16 @@ resources:
               y: 1
             targets:
             - refId: A
-              expr: max(rustfs_cluster_usage_objects_count{exordos_s3_instance="$s3"})
+              expr: max(last_over_time(rustfs_cluster_usage_objects_count{exordos_s3_instance="$s3"}[1h]))
               legendFormat: objects
             - refId: B
-              expr: max(rustfs_cluster_buckets_total{exordos_s3_instance="$s3"})
+              expr: max(last_over_time(rustfs_cluster_buckets_total{exordos_s3_instance="$s3"}[1h]))
               legendFormat: buckets
             fieldConfig:
               defaults:
                 unit: short
               overrides: []
-            description: Counted by the RustFS scanner, so they lag behind writes.
+            description: Counted by the RustFS scanner, so they lag behind writes. RustFS only publishes them once a usage snapshot has converged, so the panel shows the last value within the hour.
             options:
               textMode: value_and_name
               colorMode: none
