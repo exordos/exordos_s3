@@ -122,6 +122,16 @@ class S3InstanceBuilder(PaaSBuilder):
         if status is not None:
             instance.status = status
 
+    @staticmethod
+    def _actualize_disk_usage(
+        instance: models.S3Instance, nodes: tp.Iterable[str]
+    ) -> None:
+        # Nodes that have not reported keep the last known value rather than
+        # erasing it, as they do with the status.
+        percent = cluster.disk_used_percent(nodes)
+        if percent is not None:
+            instance.disk_used_percent = percent
+
     def create_paas_objects(
         self, instance: models.S3Instance
     ) -> tp.Collection[ua_models.TargetResourceKindAwareMixin]:
@@ -155,6 +165,7 @@ class S3InstanceBuilder(PaaSBuilder):
             members = sorted(
                 instance.members.items(), key=lambda item: item[1]["ordinal"]
             )
+            self._actualize_disk_usage(instance, instance.members)
             return [
                 models.S3InstanceNode(
                     uuid=PaaSBuilder.agent_uuid_by_node(uuid.UUID(node_uuid)),
@@ -180,6 +191,7 @@ class S3InstanceBuilder(PaaSBuilder):
         nodes_by_idx = list(nodeset.nodes.keys())
         if not nodes_by_idx:
             return []
+        self._actualize_disk_usage(instance, nodes_by_idx[: instance.nodes_number])
 
         # Create S3InstanceNode for each node in the cluster
         for i in range(instance.nodes_number):

@@ -158,6 +158,13 @@ class S3Instance(
     # Ordinals are assigned once and name the RustFS endpoints, so they must
     # not follow the order of the node set.
     members = properties.property(types.Dict(), default=dict)
+    # How full the fullest data disk of the instance is, in percent, as the
+    # nodes last reported it; None until one has. Together with disk_size it
+    # tells how much room is left.
+    disk_used_percent = properties.property(
+        types.AllowNone(types.Integer(min_value=0, max_value=100)),
+        default=None,
+    )
     root_secret = properties.property(
         types.String(min_length=1, max_length=256),
         default=lambda: "".join(

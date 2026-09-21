@@ -102,6 +102,26 @@ not mean every node is serving right now. A node set that is not `ACTIVE` —
 a VM down, a disk being grown, nodes being re-imaged — gives the instance its
 own status, and membership drift makes it `ERROR`.
 
+## How full it is
+
+`disk_used_percent` is how full the fullest data disk of the instance is, as
+`df` counts it: whole percents rounded up, blocks reserved for root left out.
+Every node reads its own disk and reports it along with its readiness, and the
+instance takes the largest value.
+
+The fullest disk is the one that matters. Every object is striped over all the
+drives of the erasure set, so they fill evenly; a node that was down while
+objects were written holds fewer shards until healing catches up, not more.
+RustFS refuses a write as soon as any one drive lacks room for its shard, or
+when less than 1% of the pool is left, so writes start failing just short of
+100 — alert well before that. `disk_used_percent` of `disk_size` is the space
+taken on each node; the space left for objects is smaller than the sum over the
+nodes by the parity share.
+
+A node that stops reporting leaves the last value in place, as it does with
+the status. The value changes at most once per percent, so a filling disk does
+not keep the control plane busy.
+
 ## Operating notes
 
 - **Upgrading the element re-images every node.** The image URL lives in the

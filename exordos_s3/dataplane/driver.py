@@ -19,6 +19,7 @@ import datetime
 import hashlib
 import json
 import logging
+import math
 import os
 import typing as tp
 import urllib.parse
@@ -517,6 +518,29 @@ class AdminClient(singletons.InheritSingleton):
             LOG.warning("Failed to remove policy %s", name, exc_info=True)
 
 
+def disk_used_percent(path: str) -> int | None:
+    """Return how full the file system mounted at `path` is, as df does.
+
+    Whole percents, rounded up: every change of the value is a new report the
+    control plane has to process, and a disk is never shown emptier than it
+    is. Blocks reserved for root are left out, since RustFS can't use them.
+    `None` while the data disk is not mounted: the root file system would
+    answer instead.
+    """
+    if not os.path.ismount(path):
+        return None
+    try:
+        st = os.statvfs(path)
+    except OSError:
+        LOG.debug("Can't stat the data disk at %s", path, exc_info=True)
+        return None
+    used = st.f_blocks - st.f_bfree
+    usable = used + st.f_bavail
+    if usable <= 0:
+        return None
+    return min(100, math.ceil(used * 100 / usable))
+
+
 class S3Instance(meta.MetaDataPlaneModel):
     """Data plane model for a single S3/rustfs node.
 
@@ -543,6 +567,11 @@ class S3Instance(meta.MetaDataPlaneModel):
     # Read from the local RustFS, never sent by the control plane: a cluster
     # node answers 503 until it has found its peers and loaded IAM.
     ready = properties.property(ra_types.Boolean(), default=False)
+    # Read from the local data disk as well: how full it is, in percent.
+    disk_used_percent = properties.property(
+        ra_types.AllowNone(ra_types.Integer(min_value=0, max_value=100)),
+        default=None,
+    )
 
     # The flag is not on the data plane, so it has to survive in the meta file
     _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name", "reconciler"}
@@ -714,6 +743,7 @@ class S3Instance(meta.MetaDataPlaneModel):
         # here as well -- otherwise the control plane keeps seeing the value
         # it sent, and a ready cluster never looks ready.
         self._fill_ready()
+        self._fill_disk_used_percent()
 
         if not self.reconciler:
             LOG.debug("Instance %s is reconciled by another node", self.uuid)
@@ -736,8 +766,12 @@ class S3Instance(meta.MetaDataPlaneModel):
             LOG.debug("RustFS is not answering its readiness probe", exc_info=True)
             self.ready = False
 
+    def _fill_disk_used_percent(self) -> None:
+        self.disk_used_percent = disk_used_percent(constants.RUSTFS_DATA_DIR)
+
     def restore_from_dp(self) -> None:
         self._fill_ready()
+        self._fill_disk_used_percent()
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()

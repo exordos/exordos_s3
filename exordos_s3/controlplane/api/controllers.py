@@ -66,6 +66,7 @@ class S3InstanceController(
                     constants.CREATE: field_p.Permissions.RW,
                 },
                 "members": {constants.ALL: field_p.Permissions.RO},
+                "disk_used_percent": {constants.ALL: field_p.Permissions.RO},
                 "root_secret": {constants.ALL: field_p.Permissions.HIDDEN},
             },
         ),

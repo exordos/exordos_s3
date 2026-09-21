@@ -51,15 +51,14 @@ def membership_drift(members: dict[str, dict], nodes: dict[str, dict]) -> set[st
     return set(members) ^ set(nodes)
 
 
-def readiness(members: dict[str, dict]) -> list[bool] | None:
-    """What each node of the instance last reported about its RustFS.
+def node_reports(nodes: tp.Iterable[str]) -> tuple[list[dict], int]:
+    """Return what the given nodes last reported, and how many were asked.
 
-    `None` when a node has never reported: the cluster cannot be judged on a
-    node the control plane has not heard from.
+    A node the control plane has not heard from yet has no report at all.
     """
-    agents = {agent_uuid_by_node(sys_uuid.UUID(node)) for node in members}
+    agents = {agent_uuid_by_node(sys_uuid.UUID(node)) for node in nodes}
     if not agents:
-        return None
+        return [], 0
 
     resources = ua_models.Resource.objects.get_all(
         filters={
@@ -67,14 +66,40 @@ def readiness(members: dict[str, dict]) -> list[bool] | None:
             "kind": dm_filters.EQ(NODE_KIND),
         },
     )
-    if len(resources) < len(agents):
+    return [r.value for r in resources], len(agents)
+
+
+def readiness(members: dict[str, dict]) -> list[bool] | None:
+    """What each node of the instance last reported about its RustFS.
+
+    `None` when a node has never reported: the cluster cannot be judged on a
+    node the control plane has not heard from.
+    """
+    reports, asked = node_reports(members)
+    if not asked:
+        return None
+    if len(reports) < asked:
         LOG.debug(
-            "Only %s of %s cluster nodes have reported so far",
-            len(resources),
-            len(agents),
+            "Only %s of %s cluster nodes have reported so far", len(reports), asked
         )
         return None
-    return [bool(r.value.get("ready")) for r in resources]
+    return [bool(r.get("ready")) for r in reports]
+
+
+def disk_used_percent(nodes: tp.Iterable[str]) -> int | None:
+    """Return how full the fullest data disk of the instance is.
+
+    Every object is striped over all drives of the erasure set, so they fill
+    evenly, and RustFS refuses a write as soon as any one of them lacks room
+    for its shard: the fullest drive is the one that stops the instance.
+    `None` until some node has reported it.
+    """
+    reported = [
+        r["disk_used_percent"]
+        for r in node_reports(nodes)[0]
+        if r.get("disk_used_percent") is not None
+    ]
+    return max(reported, default=None)
 
 
 def cluster_status(

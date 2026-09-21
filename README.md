@@ -129,6 +129,7 @@ print(obj["Body"].read())  # b'hello'
 | `mfa_delete` | boolean | ✓ | Require MFA to delete objects |
 | `status` | string | ✗ | Instance status: PENDING, CREATING, ACTIVE, ERROR |
 | `nodes` | array | ✗ | Data-plane nodes with IP, port |
+| `disk_used_percent` | integer | ✗ | How full the fullest data disk is, 0–100, rounded up; `null` until a node reports it |
 
 ### Buckets
 

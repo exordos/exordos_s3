@@ -46,6 +46,11 @@ class S3InstanceNode(
     # Reported by the node, never sent to it: whether its RustFS serves
     # requests. Not a target field, so it only changes the full hash.
     ready = properties.property(ra_types.Boolean(), default=False)
+    # Reported by the node as well: how full its data disk is, in percent.
+    disk_used_percent = properties.property(
+        ra_types.AllowNone(ra_types.Integer(min_value=0, max_value=100)),
+        default=None,
+    )
 
     @classmethod
     def get_resource_kind(cls) -> str:

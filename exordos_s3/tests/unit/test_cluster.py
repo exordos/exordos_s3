@@ -14,16 +14,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import uuid as sys_uuid
+import typing as tp
 from unittest import mock
+import uuid as sys_uuid
 
+from gcl_sdk.infra.services import builder as sdk_infra_builder
+from gcl_sdk.paas.services import builder as sdk_paas_builder
+import pytest
 
 from exordos_s3.controlplane import cluster
 from exordos_s3.controlplane.dm import models as dm_models
 from exordos_s3.controlplane.infra.services import builder as infra_builder
-from gcl_sdk.infra.services import builder as sdk_infra_builder
-from gcl_sdk.paas.services import builder as sdk_paas_builder
-
 from exordos_s3.controlplane.paas.services import builder as paas_builder
 
 NODES = {
@@ -119,6 +120,13 @@ class TestRenderRustfsEnv:
         assert "RUSTFS_STORAGE_CLASS_STANDARD" not in env
 
 
+@pytest.fixture
+def no_disk_reports() -> tp.Iterator[None]:
+    with mock.patch.object(cluster, "disk_used_percent", return_value=None):
+        yield
+
+
+@pytest.mark.usefixtures("no_disk_reports")
 class TestPaaSObjects:
     def _collection(self) -> sdk_paas_builder.PaaSCollection:
         return sdk_paas_builder.PaaSCollection(paas_objects=())
@@ -262,6 +270,92 @@ class TestReadiness:
         assert cluster.readiness({}) is None
 
 
+class TestDiskUsedPercent:
+    def _percent(self, reports: list[dict]) -> int | None:
+        manager = mock.Mock()
+        manager.get_all.return_value = [mock.Mock(value=r) for r in reports]
+        with mock.patch.object(cluster.ua_models.Resource, "objects", manager):
+            return cluster.disk_used_percent(NODES)
+
+    def test_the_fullest_node_speaks_for_the_instance(self) -> None:
+        reports = [{"disk_used_percent": p} for p in (40, 41, 87, 40)]
+
+        assert self._percent(reports) == 87
+
+    def test_nodes_that_did_not_measure_are_skipped(self) -> None:
+        reports: list[dict] = [
+            {"disk_used_percent": None},
+            {"ready": True},
+            {"disk_used_percent": 12},
+        ]
+
+        assert self._percent(reports) == 12
+
+    def test_nothing_reported_is_unknown(self) -> None:
+        assert self._percent([{"disk_used_percent": None}]) is None
+        assert self._percent([]) is None
+
+    def test_no_nodes_no_query(self) -> None:
+        manager = mock.Mock()
+        with mock.patch.object(cluster.ua_models.Resource, "objects", manager):
+            assert cluster.disk_used_percent([]) is None
+        manager.get_all.assert_not_called()
+
+
+class TestDiskUsageOnInstance:
+    def _instance(self, distributed: bool) -> mock.Mock:
+        instance = mock.Mock()
+        instance.name = "s3"
+        instance.disk_used_percent = 30
+        instance.nodes_number = 4 if distributed else 1
+        instance.members = (
+            infra_builder.freeze_members({}, NODES, 4) if distributed else {}
+        )
+        instance.is_distributed.return_value = distributed
+        instance.get_actual_nodeset.return_value = mock.Mock(
+            status="ACTIVE", nodes=NODES
+        )
+        instance.get_buckets.return_value = []
+        instance.get_policies.return_value = []
+        instance.get_users.return_value = []
+        return instance
+
+    def _actualize(self, instance: mock.Mock, percent: int | None) -> mock.Mock:
+        with (
+            mock.patch.object(cluster, "readiness", return_value=None),
+            mock.patch.object(
+                cluster, "disk_used_percent", return_value=percent
+            ) as measured,
+        ):
+            paas_builder.S3InstanceBuilder().actualize_paas_objects(
+                instance, sdk_paas_builder.PaaSCollection(paas_objects=())
+            )
+        return measured
+
+    def test_cluster_asks_every_member(self) -> None:
+        instance = self._instance(distributed=True)
+
+        measured = self._actualize(instance, 55)
+
+        assert instance.disk_used_percent == 55
+        assert set(measured.call_args.args[0]) == set(NODES)
+
+    def test_single_node_asks_its_node(self) -> None:
+        instance = self._instance(distributed=False)
+
+        measured = self._actualize(instance, 7)
+
+        assert instance.disk_used_percent == 7
+        assert list(measured.call_args.args[0]) == [next(iter(NODES))]
+
+    def test_silence_keeps_the_last_value(self) -> None:
+        instance = self._instance(distributed=True)
+
+        self._actualize(instance, None)
+
+        assert instance.disk_used_percent == 30
+
+
 MEMBERS = infra_builder.freeze_members({}, NODES, 4)
 REPLACED = {
     **{u: n for u, n in NODES.items() if not u.startswith("b")},
@@ -293,6 +387,7 @@ class TestInstanceStatus:
         assert self._status("ACTIVE", NODES, None) is None
 
 
+@pytest.mark.usefixtures("no_disk_reports")
 class TestBuildersAgree:
     """Both builders write one status, and neither undoes the other."""
 

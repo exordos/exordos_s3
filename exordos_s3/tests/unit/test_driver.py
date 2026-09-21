@@ -16,8 +16,8 @@
 
 import logging
 import typing as tp
-import uuid
 from unittest import mock
+import uuid
 
 import pytest
 import requests
@@ -152,6 +152,58 @@ class TestReadiness:
         assert instance.ready is False
 
 
+class TestDiskUsedPercent:
+    def _statvfs(self, blocks: int, bfree: int, bavail: int) -> mock.Mock:
+        return mock.Mock(f_blocks=blocks, f_bfree=bfree, f_bavail=bavail)
+
+    def _percent(self, st: mock.Mock, mounted: bool = True) -> int | None:
+        with (
+            mock.patch.object(driver.os.path, "ismount", return_value=mounted),
+            mock.patch.object(driver.os, "statvfs", return_value=st),
+        ):
+            return driver.disk_used_percent("/data")
+
+    def test_reserved_blocks_are_not_room(self) -> None:
+        # 50 used, 45 free for users, 5 reserved for root: 50 / 95, as df says
+        assert self._percent(self._statvfs(100, 50, 45)) == 53
+
+    def test_rounds_up(self) -> None:
+        assert self._percent(self._statvfs(1000, 999, 999)) == 1
+        assert self._percent(self._statvfs(1000, 0, 0)) == 100
+
+    def test_empty_disk(self) -> None:
+        assert self._percent(self._statvfs(100, 100, 95)) == 0
+
+    def test_unmounted_disk_is_unknown(self) -> None:
+        assert self._percent(self._statvfs(100, 50, 45), mounted=False) is None
+
+    def test_unreadable_disk_is_unknown(self) -> None:
+        with (
+            mock.patch.object(driver.os.path, "ismount", return_value=True),
+            mock.patch.object(driver.os, "statvfs", side_effect=OSError("EIO")),
+        ):
+            assert driver.disk_used_percent("/data") is None
+
+    def test_reports_the_data_disk(self) -> None:
+        with mock.patch.object(driver, "AdminClient"):
+            instance = driver.S3Instance(uuid=uuid.uuid4(), name="s3")
+
+        with mock.patch.object(
+            driver, "disk_used_percent", return_value=42
+        ) as measured:
+            instance._fill_disk_used_percent()
+
+        measured.assert_called_once_with(driver.constants.RUSTFS_DATA_DIR)
+        assert instance.disk_used_percent == 42
+
+
+@pytest.fixture
+def disk_at_42() -> tp.Iterator[None]:
+    with mock.patch.object(driver, "disk_used_percent", return_value=42):
+        yield
+
+
+@pytest.mark.usefixtures("disk_at_42")
 class TestReadinessOnApply:
     def _instance(self, **kwargs: tp.Any) -> driver.S3Instance:
         with mock.patch.object(driver, "AdminClient"):
@@ -176,6 +228,7 @@ class TestReadinessOnApply:
             instance.dump_to_dp()
 
         assert instance.ready is True
+        assert instance.disk_used_percent == 42
 
     def test_a_follower_reports_readiness_too(self) -> None:
         instance = self._instance(reconciler=False)
@@ -186,4 +239,5 @@ class TestReadinessOnApply:
             instance.dump_to_dp()
 
         assert instance.ready is True
+        assert instance.disk_used_percent == 42
         instance.mc.list_buckets.assert_not_called()
