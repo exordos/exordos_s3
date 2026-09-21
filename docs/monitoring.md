@@ -67,6 +67,13 @@ max by (exordos_s3_instance) (rustfs_cluster_capacity_free_bytes)
 The data disk also holds `/var/log`, bind-mounted from the same file system,
 so the node's logs count against it.
 
+## Dashboard
+
+The `s3_dashboard` element puts an **S3 instance** dashboard into the **S3**
+folder of the shared observability Grafana: disk fullness per node, space left
+for objects, drive health and request traffic, per project and instance. It
+depends on the `observability` element; install it after that one.
+
 ## Notes
 
 - **The endpoint is the root one on purpose.** RustFS (1.0.0-beta.4, the
@@ -75,6 +82,10 @@ so the node's logs count against it.
   every metric to stdout, and so to the journal. Traces and logs are switched
   off explicitly, since vmagent only accepts metrics, and
   `RUSTFS_OBS_LOG_STDOUT_ENABLED` keeps the logs in the journal.
+- **Request latency is a mean.** RustFS 1.0.0-beta.4 buckets
+  `rustfs_http_server_request_duration_seconds` on millisecond bounds while it
+  records seconds, so every request lands in the first bucket and quantiles
+  mean nothing; divide `_sum` by `_count` instead.
 - **Without the observability element RustFS stays quiet.** The failed exports
   are dropped without a log line, and readiness is unaffected.
 - **Changing the labels or the endpoint restarts RustFS** on every node at
