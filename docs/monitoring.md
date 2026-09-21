@@ -1,0 +1,81 @@
+# Monitoring S3 instances
+
+The nodes of an S3 instance send their metrics to the platform
+VictoriaMetrics of the `observability` element. Nothing is sent until that
+element is deployed: the vmagent of the base image waits for
+`victoria-storage.local.genesis-core.tech` to resolve before it starts.
+
+RustFS metrics need a node image built on `exordos_base` 1.3.1 or later, whose
+vmagent accepts OTLP on `127.0.0.1:8430`. A node on an older image still gets
+the new `rustfs.env` and restarts RustFS, but its metrics are dropped without a
+log line; they arrive once the instance moves to a version with a newer image.
+
+## What is collected
+
+| Source | Path | Labels that name the instance |
+|---|---|---|
+| node_exporter of the base image | scraped by vmagent every 15 s | `instance` — the node host name, `s3aas-dp-<instance uuid>-node-<suffix>` |
+| RustFS | OTLP push to the local vmagent every 30 s | `exordos_s3_instance`, `exordos_project` |
+
+node_exporter covers the node itself, including the data disk mounted at
+`/var/lib/rustfs/data`. RustFS adds its own view: cluster capacity, drives,
+requests, objects and buckets (`rustfs_cluster_*`, `rustfs_system_drive_*`,
+`rustfs_node_disk_*` and more).
+
+RustFS labels its metrics with the attributes the control plane writes into
+`rustfs.env` (`OTEL_RESOURCE_ATTRIBUTES`). Per node series also carry
+`server`/`drive` (the RustFS endpoint of the drive) and `network.local.address`
+(the node address). Every node of a distributed instance reports the
+cluster-wide `rustfs_cluster_*` series, so take one of them rather than a sum.
+
+## How full the disks are
+
+The fullest drive is the one that stops writes: RustFS refuses a write once any
+drive of the erasure set lacks room for its shard, or once less than 1% of the
+pool is free. As `df` counts it, root-reserved blocks left out:
+
+```promql
+max by (exordos_s3_instance) (
+  label_replace(
+    100 * (
+      node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data"}
+      - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data"}
+    ) / (
+      node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data"}
+      - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data"}
+      + node_filesystem_avail_bytes{mountpoint="/var/lib/rustfs/data"}
+    ),
+    "exordos_s3_instance", "$1", "instance", "s3aas-dp-(.+)-node-.+"
+  )
+)
+```
+
+The same from RustFS, per drive:
+
+```promql
+max by (exordos_s3_instance) (
+  100 * rustfs_system_drive_used_bytes / rustfs_system_drive_total_bytes
+)
+```
+
+Space left for objects, after erasure coding, as one node sees the cluster:
+
+```promql
+max by (exordos_s3_instance) (rustfs_cluster_capacity_free_bytes)
+```
+
+The data disk also holds `/var/log`, bind-mounted from the same file system,
+so the node's logs count against it.
+
+## Notes
+
+- **The endpoint is the root one on purpose.** RustFS (1.0.0-beta.4, the
+  version the image ships) only turns its stdout exporter off when
+  `RUSTFS_OBS_ENDPOINT` is set; with just `RUSTFS_OBS_METRIC_ENDPOINT` it dumps
+  every metric to stdout, and so to the journal. Traces and logs are switched
+  off explicitly, since vmagent only accepts metrics, and
+  `RUSTFS_OBS_LOG_STDOUT_ENABLED` keeps the logs in the journal.
+- **Without the observability element RustFS stays quiet.** The failed exports
+  are dropped without a log line, and readiness is unaffected.
+- **Changing the labels or the endpoint restarts RustFS** on every node at
+  once, like any change of `rustfs.env`.
