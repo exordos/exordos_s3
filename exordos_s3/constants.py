@@ -22,6 +22,11 @@ RUSTFS_DATA_DIR = "/var/lib/rustfs/data"
 # Readiness probe of the local node: 200 only once it serves S3 requests
 RUSTFS_READY_URL = f"http://127.0.0.1:{RUSTFS_PORT}/health/ready"
 
+# vmagent of the base image accepts OTLP metrics here and relays them to the
+# platform VictoriaMetrics; it only runs once the observability element is
+# deployed, and RustFS drops its metrics quietly until then.
+VMAGENT_OTLP_ENDPOINT = "http://127.0.0.1:8430/opentelemetry"
+
 # Nodes of a distributed instance reach each other by these names, resolved
 # through /etc/hosts. RustFS identifies a pool by the literal endpoint string,
 # so the names have to outlive node address changes.
