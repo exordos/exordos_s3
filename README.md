@@ -317,6 +317,14 @@ what its status means and how it is operated.
 
 ## Troubleshooting
 
+### A recursive listing stops early
+
+RustFS 1.0.0 can end a flat (recursive, no delimiter) ListObjectsV2 before the
+end of a deep tree and still answer `IsTruncated=false`; on the stand a bucket
+of 104,137 objects listed as 5,000. Listing with the `/` delimiter, directory
+by directory, returns everything. Fixed upstream in rustfs/rustfs#7994, which
+is not in a stable release yet (first in 1.0.1-preview.6).
+
 ### Instance stuck in CREATING
 
 Check PluginReconciler logs on metapaas-cp:
