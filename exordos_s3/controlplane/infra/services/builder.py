@@ -45,6 +45,7 @@ RUSTFS_CONSOLE_ADDRESS=127.0.0.1:9001
 RUSTFS_CONSOLE_ENABLE=true
 RUSTFS_VOLUMES={volumes}
 RUSTFS_OBS_LOGGER_LEVEL=error
+RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit
 """
 
 RUSTFS_ROOT_USER = "admin"
@@ -93,7 +94,13 @@ def render_rustfs_env(
     members: dict[str, dict] | None = None,
     parity: int | None = None,
 ) -> str:
-    """Render rustfs.env, the same for every node of an instance."""
+    """Render rustfs.env, the same for every node of an instance.
+
+    New buckets follow the process-wide durability mode (strict) instead of
+    the relaxed one RustFS 1.0 seeds into them by default: a node can be
+    destroyed rather than shut down, and relaxed leaves object metadata to the
+    page cache.
+    """
     if not members:
         return RUSTFS_CONF_TEMPLATE.format(
             root_user=RUSTFS_ROOT_USER,

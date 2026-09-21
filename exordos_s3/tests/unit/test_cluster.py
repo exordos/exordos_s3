@@ -93,6 +93,7 @@ class TestRenderRustfsEnv:
             "RUSTFS_CONSOLE_ENABLE=true\n"
             "RUSTFS_VOLUMES=/var/lib/rustfs/data\n"
             "RUSTFS_OBS_LOGGER_LEVEL=error\n"
+            "RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit\n"
         )
 
     def test_distributed_env(self) -> None:
