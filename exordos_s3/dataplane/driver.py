@@ -441,7 +441,11 @@ class AdminClient(singletons.InheritSingleton):
             raise
 
     def get_bucket_quota(self, bucket_name):
-        """Get bucket quota in bytes. Returns 0 if no quota set."""
+        """Get bucket quota in bytes: 0 if none is set, None if unknown.
+
+        RustFS 1.0 answers 503 until it has counted the usage of a bucket, and
+        taking that for "no quota" had the quota set again on every pass.
+        """
         try:
             encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
             resp = self._admin_request("GET", f"/quota/{encoded_bucket}")
@@ -449,12 +453,8 @@ class AdminClient(singletons.InheritSingleton):
             # RustFS returns {"quota": <bytes>, "size": <bytes>, "quotatype": "hard"}
             return data.get("quota", 0) or 0
         except Exception:
-            LOG.debug(
-                "Failed to get quota for bucket %s, assuming no quota",
-                bucket_name,
-                exc_info=True,
-            )
-            return 0
+            LOG.debug("Can't read the quota of bucket %s", bucket_name, exc_info=True)
+            return None
 
     def clear_bucket_quota(self, bucket_name):
         """Remove bucket quota."""
@@ -682,7 +682,7 @@ class S3Instance(meta.MetaDataPlaneModel):
 
             target_quota = b.get("quota_bytes", 0)
             actual_quota = self.mc.get_bucket_quota(bname)
-            if actual_quota != target_quota:
+            if actual_quota is not None and actual_quota != target_quota:
                 if target_quota > 0:
                     self.mc.set_bucket_quota(bname, target_quota)
                 else:
