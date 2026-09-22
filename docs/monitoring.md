@@ -90,8 +90,8 @@ The element depends on the `observability` element; install it after that one.
 
 ## Notes
 
-- **The endpoint is the root one on purpose.** RustFS (1.0.0, the
-  version the image ships) only turns its stdout exporter off when
+- **The endpoint is the root one on purpose.** RustFS 1.0.0 only
+  turns its stdout exporter off when
   `RUSTFS_OBS_ENDPOINT` is set; with just `RUSTFS_OBS_METRIC_ENDPOINT` it dumps
   every metric to stdout, and so to the journal. Traces and logs are switched
   off explicitly, since vmagent only accepts metrics, and

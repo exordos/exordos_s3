@@ -322,13 +322,33 @@ to the observability element and how to query how full the disks are.
 
 ### A recursive listing stops early
 
-RustFS (seen on 1.0.0-beta.4, 1.0.0 and 1.0.1-preview.9) ends a flat
+RustFS (seen on 1.0.0-beta.4, 1.0.0 and 1.0.1-preview.10) ends a flat
 (recursive, no delimiter) ListObjectsV2 early and still answers
 `IsTruncated=false` when two directories share a name prefix, such as a
 DBaaS backup directory `<id>/` next to `<id>-rollbacks/`: in keys `-` sorts
 before `/`. On the stand a bucket of 104,137 objects listed as 5,000; two such
 directories of 1,200 keys each list as 2,000. Listing with the `/` delimiter, directory by
 directory, returns everything. `test_listing.py` reproduces it.
+
+### Writes to a bucket with a quota fail with 503 after an upgrade
+
+After an instance is upgraded from RustFS 1.0.0-beta.4, the RustFS scanner
+stops on the usage it inherited (`usage_floor_load_failed` in the journal)
+and never counts bucket usage again. Buckets that had a quota before the
+upgrade are checked against that frozen usage. Every write to a bucket that
+gets a quota after the upgrade is refused with 503 "Bucket quota check
+temporarily unavailable". To have the scanner count all buckets again, send
+this admin call to the first node, signed with `RUSTFS_ACCESS_KEY` and
+`RUSTFS_SECRET_KEY` from `/etc/exordos_metapaas/rustfs.env`:
+
+```bash
+awscurl --service s3 --access_key <key> --secret_key <secret> \
+  -X POST -d '{"mode":"full-rebuild"}' \
+  http://<node>:9000/rustfs/admin/v3/scanner/usage-state/reset
+```
+
+Writes go through again once the scanner has finished a full pass, which on
+a big bucket can take hours.
 
 ### Instance stuck in CREATING
 
