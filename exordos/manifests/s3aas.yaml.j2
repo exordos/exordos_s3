@@ -161,7 +161,7 @@ resources:
     rustfs_1:
       name: "rustfs_1"
       description: "12345678-c625-4fee-81d5-f691897b8142"
-      image: "{{ repository | default('https://repo.exordos.com/exordos-elements') }}/{{ name }}/{{ version }}/images/exordos-metapaas-s3-dp.raw.zst"
+      image: "{{ images.exordos_metapaas_s3_dp }}"
 
 exports:
   rustfs_1:
