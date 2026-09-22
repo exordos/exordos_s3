@@ -70,9 +70,21 @@ so the node's logs count against it.
 ## Dashboard
 
 The `s3_dashboard` element puts an **S3 instance** dashboard into the **S3**
-folder of the shared observability Grafana: disk fullness per node, space left
-for objects, drive health and request traffic, per project and instance. It
-depends on the `observability` element; install it after that one.
+folder of the shared observability Grafana, per project and instance:
+
+- capacity: disk fullness per node, space left for objects, raw and usable space;
+- health: nodes and drives online, offline and healing;
+- data safety: how many more drives can be lost, objects waiting for repair,
+  write quorum failures, nodes offline, internode errors, free inodes;
+- usage accounting: the last scanner cycle, when bucket usage was last saved
+  and whether it converged, quota checks that failed. Quotas and object counts
+  depend on it; after an upgrade from 1.0.0-beta.4 it shows `never`;
+- buckets: size, objects and quota fill of each bucket;
+- traffic and operations: requests by status and S3 operation, share of 5xx,
+  mean latency, bytes sent;
+- process: RustFS memory against node RAM, restarts and OOM kills.
+
+The element depends on the `observability` element; install it after that one.
 
 ## Notes
 
