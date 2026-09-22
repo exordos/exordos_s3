@@ -108,6 +108,18 @@ class TestBucketQuota:
     def test_reads_the_quota(self) -> None:
         assert self._quota(self._response({"bucket": "b", "quota": 1024})) == 1024
 
+    def test_reads_the_quota_without_usage(self) -> None:
+        # /quota/<bucket> waits for the scanner to count the bucket's usage
+        client = _admin_client()
+        with mock.patch.object(
+            client,
+            "_admin_request",
+            return_value=self._response({"quota": 1024, "size": 1024}),
+        ) as request:
+            client.get_bucket_quota("b")
+
+        request.assert_called_once_with("GET", "/get-bucket-quota?bucket=b")
+
     def test_no_quota_is_zero(self) -> None:
         assert self._quota(self._response({"bucket": "b", "quota": None})) == 0
 
@@ -155,6 +167,15 @@ class TestQuotaReconciliation:
         instance._reconcile_buckets({"b": {}})
 
         instance.mc.set_bucket_quota.assert_not_called()
+
+    def test_refused_quota_does_not_stop_the_pass(self) -> None:
+        # RustFS 1.0 answers 503 to setting a quota right after start
+        instance = self._instance(0)
+        instance.mc.set_bucket_quota.side_effect = _http_error(503, "boom")
+
+        instance._reconcile_buckets({"b": {}, "gone": {}})
+
+        instance.mc.remove_bucket.assert_called_once_with("gone")
 
 
 class TestReconciler:
