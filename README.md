@@ -322,11 +322,13 @@ to the observability element and how to query how full the disks are.
 
 ### A recursive listing stops early
 
-RustFS 1.0.0 can end a flat (recursive, no delimiter) ListObjectsV2 before the
-end of a deep tree and still answer `IsTruncated=false`; on the stand a bucket
-of 104,137 objects listed as 5,000. Listing with the `/` delimiter, directory
-by directory, returns everything. Fixed upstream in rustfs/rustfs#7994, which
-is not in a stable release yet (first in 1.0.1-preview.6).
+RustFS (seen on 1.0.0-beta.4, 1.0.0 and 1.0.1-preview.9) ends a flat
+(recursive, no delimiter) ListObjectsV2 early and still answers
+`IsTruncated=false` when two directories share a name prefix, such as a
+DBaaS backup directory `<id>/` next to `<id>-rollbacks/`: in keys `-` sorts
+before `/`. On the stand a bucket of 104,137 objects listed as 5,000; two such
+directories of 1,200 keys each list as 2,000. Listing with the `/` delimiter, directory by
+directory, returns everything. `test_listing.py` reproduces it.
 
 ### Instance stuck in CREATING
 
