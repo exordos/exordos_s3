@@ -443,12 +443,16 @@ class AdminClient(singletons.InheritSingleton):
     def get_bucket_quota(self, bucket_name):
         """Get bucket quota in bytes: 0 if none is set, None if unknown.
 
-        RustFS 1.0 answers 503 until it has counted the usage of a bucket, and
-        taking that for "no quota" had the quota set again on every pass.
+        Reads the MinIO-compatible endpoint, which returns the configured quota
+        alone: RustFS 1.0 answers ``/quota/<bucket>`` with 503 until its scanner
+        has counted the usage of the bucket, and after an upgrade from
+        1.0.0-beta.4 the scanner never does.
         """
         try:
             encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
-            resp = self._admin_request("GET", f"/quota/{encoded_bucket}")
+            resp = self._admin_request(
+                "GET", f"/get-bucket-quota?bucket={encoded_bucket}"
+            )
             data = resp.json()
             # RustFS returns {"quota": <bytes>, "size": <bytes>, "quotatype": "hard"}
             return data.get("quota", 0) or 0
@@ -684,7 +688,15 @@ class S3Instance(meta.MetaDataPlaneModel):
             actual_quota = self.mc.get_bucket_quota(bname)
             if actual_quota is not None and actual_quota != target_quota:
                 if target_quota > 0:
-                    self.mc.set_bucket_quota(bname, target_quota)
+                    # RustFS 1.0 refuses to set a quota for a few seconds
+                    # after start; the next pass sets it again.
+                    try:
+                        self.mc.set_bucket_quota(bname, target_quota)
+                    except Exception:
+                        LOG.warning(
+                            "Quota of bucket %s is not set, retrying on the next pass",
+                            bname,
+                        )
                 else:
                     self.mc.clear_bucket_quota(bname)
 
