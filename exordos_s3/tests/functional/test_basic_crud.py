@@ -209,6 +209,26 @@ class TestS3DataOperations:
 class TestQuotaEnforcement:
     """Uploading beyond quota_bytes should fail."""
 
+    def test_upload_within_quota_accepted(
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
+    ):
+        # RustFS 1.0.0 answered every write into a bucket with a quota with 503
+        # until it had counted the bucket's usage, which it never did
+        bucket_name = f"test-quota-{uuid.uuid4().hex[:8]}"
+        s3_conftest.create_bucket_via_api(
+            s3_api_client,
+            s3_instance_uuid,
+            bucket_name,
+            s3_project_id,
+            s3_probe_client,
+            quota_bytes=1024 * 1024,
+        )
+
+        s3_probe_client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
+
+        body = s3_probe_client.get_object(Bucket=bucket_name, Key="small")["Body"]
+        assert body.read() == b"x" * 100
+
     def test_upload_beyond_quota_denied(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
