@@ -14,6 +14,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
 import logging
 import typing as tp
 import uuid
@@ -90,6 +91,70 @@ class TestRemovePolicy:
 @pytest.mark.parametrize("name", ["KMSAuditor", "KMSKeyAdministrator", "KMSKeyUser"])
 def test_kms_policies_are_system_policies(name: str) -> None:
     assert name in driver.SYSTEM_POLICIES
+
+
+class TestBucketQuota:
+    def _quota(self, response: tp.Any) -> int | None:
+        client = _admin_client()
+        with mock.patch.object(client, "_admin_request", side_effect=[response]):
+            return client.get_bucket_quota("b")
+
+    def _response(self, body: dict) -> requests.Response:
+        response = requests.Response()
+        response.status_code = 200
+        response._content = json.dumps(body).encode("utf-8")
+        return response
+
+    def test_reads_the_quota(self) -> None:
+        assert self._quota(self._response({"bucket": "b", "quota": 1024})) == 1024
+
+    def test_no_quota_is_zero(self) -> None:
+        assert self._quota(self._response({"bucket": "b", "quota": None})) == 0
+
+    def test_unanswered_quota_is_unknown(self) -> None:
+        # RustFS 1.0 until it has counted the usage of the bucket
+        unavailable = _http_error(
+            503,
+            "<Error><Code>ServiceUnavailable</Code><Message>authoritative "
+            "bucket usage is not available yet</Message></Error>",
+        )
+
+        assert self._quota(unavailable) is None
+
+
+class TestQuotaReconciliation:
+    def _instance(self, quota: int | None) -> driver.S3Instance:
+        with mock.patch.object(driver, "AdminClient"):
+            instance = driver.S3Instance(
+                uuid=uuid.uuid4(),
+                name="s3",
+                buckets={"b": {"quota_bytes": 1024}},
+            )
+        instance.mc.get_bucket_state.return_value = {}
+        instance.mc.get_bucket_quota.return_value = quota
+        return instance
+
+    def test_unknown_quota_is_left_alone(self) -> None:
+        instance = self._instance(None)
+
+        instance._reconcile_buckets({"b": {}})
+
+        instance.mc.set_bucket_quota.assert_not_called()
+        instance.mc.clear_bucket_quota.assert_not_called()
+
+    def test_differing_quota_is_set(self) -> None:
+        instance = self._instance(0)
+
+        instance._reconcile_buckets({"b": {}})
+
+        instance.mc.set_bucket_quota.assert_called_once_with("b", 1024)
+
+    def test_matching_quota_is_not_set_again(self) -> None:
+        instance = self._instance(1024)
+
+        instance._reconcile_buckets({"b": {}})
+
+        instance.mc.set_bucket_quota.assert_not_called()
 
 
 class TestReconciler:
