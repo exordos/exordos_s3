@@ -450,7 +450,7 @@ resources:
               y: 34
             targets:
             - refId: A
-              expr: sum by (stage) (rate(rustfs_system_storage_erasure_write_quorum_failures_total{exordos_s3_instance="$s3"}[5m]))
+              expr: sum by (stage) (rate(rustfs_system_storage_erasure_write_quorum_failures_total{exordos_s3_instance="$s3"}[5m])) or on() label_replace(vector(0), "stage", "none", "", "")
               legendFormat: "{{ '{{stage}}' }}"
             fieldConfig:
               defaults:
@@ -660,7 +660,7 @@ resources:
               y: 45
             targets:
             - refId: A
-              expr: sum(rate(rustfs_bucket_quota_check_failed_total{exordos_s3_instance="$s3"}[5m]))
+              expr: sum(rate(rustfs_bucket_quota_check_failed_total{exordos_s3_instance="$s3"}[5m])) or vector(0)
               legendFormat: failed
             fieldConfig:
               defaults:
