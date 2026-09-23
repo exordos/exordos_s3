@@ -25,6 +25,10 @@ build:
   elements:
     # Communal shared S3 instance for platform-wide use.
     - manifest: manifests/communal_s3.yaml.j2
+    # Grafana dashboard of S3 instances on the shared observability Grafana
+    # instance. Depends on the `observability` element and reuses the
+    # grafanaaas plugin, so it needs no image or wheel of its own.
+    - manifest: manifests/s3_dashboard.yaml.j2
     # s3 dataplane image (launched per s3 instance by the infra builder)
     - manifest: manifests/s3aas.yaml.j2
       artifacts:

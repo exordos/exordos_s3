@@ -1,0 +1,887 @@
+name: "s3_dashboard"
+description: "Grafana dashboard of S3 instances (capacity, health, traffic) on the shared observability Grafana instance."
+schema_version: 1
+version: "{{ version }}"
+api_version: "v1"
+
+requirements:
+  core:
+    from_version: "0.0.0"
+  grafanaaas:
+    from_version: "0.0.0"
+  observability:
+    from_version: "0.0.1"
+
+resources:
+
+  # The panels read node_exporter series (the instance is in the node host
+  # name) and the RustFS series labelled exordos_s3_instance/exordos_project
+  # by the control plane, see docs/monitoring.md. A legend that needs
+  # Grafana's double-brace syntax is written as a Jinja string literal.
+  $grafanaaas.types.grafana.dashboards:
+    s3:
+      name: "s3"
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      source:
+        kind: raw
+        content:
+          title: S3 instance
+          uid: exordos-s3-instance
+          description: Capacity, health and traffic of one S3 instance (s3aas).
+          schemaVersion: 41
+          version: 1
+          refresh: 1m
+          time:
+            from: now-24h
+            to: now
+          tags:
+          - s3
+          - rustfs
+          templating:
+            list:
+            - name: project
+              label: Project
+              type: query
+              query:
+                query: label_values(rustfs_cluster_capacity_raw_total_bytes, exordos_project)
+                refId: project
+              definition: label_values(rustfs_cluster_capacity_raw_total_bytes, exordos_project)
+              refresh: 2
+              includeAll: true
+              allValue: .+
+              sort: 1
+            - name: s3
+              label: S3 instance
+              type: query
+              query:
+                query: label_values(rustfs_cluster_capacity_raw_total_bytes{exordos_project=~"$project"}, exordos_s3_instance)
+                refId: s3
+              definition: label_values(rustfs_cluster_capacity_raw_total_bytes{exordos_project=~"$project"}, exordos_s3_instance)
+              refresh: 2
+              sort: 1
+          panels:
+          - id: 1
+            type: row
+            title: Capacity
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 0
+            panels: []
+          - id: 2
+            type: gauge
+            title: Fullest data disk
+            gridPos:
+              h: 7
+              w: 6
+              x: 0
+              y: 1
+            targets:
+            - refId: A
+              expr: max(100 * (node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"}) / (node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} + node_filesystem_avail_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"}))
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: percent
+                min: 0
+                max: 100
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: orange
+                    value: 80
+                  - color: red
+                    value: 90
+              overrides: []
+            description: How full the fullest data disk of the instance is, as df counts it. RustFS refuses writes once any drive lacks room for its shard, or once less than 1% of the pool is free.
+          - id: 3
+            type: stat
+            title: Space left for objects
+            gridPos:
+              h: 7
+              w: 6
+              x: 6
+              y: 1
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_capacity_free_bytes{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: bytes
+              overrides: []
+            description: Free space for objects after erasure coding, as RustFS counts it.
+            options:
+              colorMode: none
+              graphMode: none
+          - id: 4
+            type: stat
+            title: Usable capacity
+            gridPos:
+              h: 7
+              w: 6
+              x: 12
+              y: 1
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_capacity_usable_total_bytes{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: bytes
+              overrides: []
+            description: Total capacity after erasure coding.
+            options:
+              colorMode: none
+              graphMode: none
+          - id: 5
+            type: stat
+            title: Objects / buckets
+            gridPos:
+              h: 7
+              w: 6
+              x: 18
+              y: 1
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_usage_objects_count{exordos_s3_instance="$s3"})
+              legendFormat: objects
+            - refId: B
+              expr: max(rustfs_cluster_buckets_total{exordos_s3_instance="$s3"})
+              legendFormat: buckets
+            fieldConfig:
+              defaults:
+                unit: short
+              overrides: []
+            description: Counted by the RustFS scanner, so they lag behind writes.
+            options:
+              textMode: value_and_name
+              colorMode: none
+              graphMode: none
+          - id: 6
+            type: timeseries
+            title: Data disk used per node
+            gridPos:
+              h: 9
+              w: 12
+              x: 0
+              y: 8
+            targets:
+            - refId: A
+              expr: 100 * (node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"}) / (node_filesystem_size_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} - node_filesystem_free_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} + node_filesystem_avail_bytes{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"})
+              legendFormat: "{{ '{{instance}}' }}"
+            fieldConfig:
+              defaults:
+                unit: percent
+                min: 0
+                max: 100
+              overrides: []
+          - id: 7
+            type: timeseries
+            title: Raw space
+            gridPos:
+              h: 9
+              w: 12
+              x: 12
+              y: 8
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_capacity_used_bytes{exordos_s3_instance="$s3"})
+              legendFormat: used
+            - refId: B
+              expr: max(rustfs_cluster_capacity_raw_total_bytes{exordos_s3_instance="$s3"})
+              legendFormat: total
+            fieldConfig:
+              defaults:
+                unit: bytes
+              overrides: []
+          - id: 8
+            type: row
+            title: Health
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 17
+            panels: []
+          - id: 9
+            type: stat
+            title: Nodes reporting
+            gridPos:
+              h: 5
+              w: 6
+              x: 0
+              y: 18
+            targets:
+            - refId: A
+              expr: count(up{job="node_exporter",instance=~"s3aas-dp-$s3-node-.+"} == 1)
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+              overrides: []
+            options:
+              colorMode: none
+              graphMode: none
+          - id: 10
+            type: stat
+            title: Drives online
+            gridPos:
+              h: 5
+              w: 6
+              x: 6
+              y: 18
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_health_drives_online_count{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+              overrides: []
+            options:
+              colorMode: none
+              graphMode: none
+          - id: 11
+            type: stat
+            title: Drives offline
+            gridPos:
+              h: 5
+              w: 6
+              x: 12
+              y: 18
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_health_drives_offline_count{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: red
+                    value: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+          - id: 12
+            type: stat
+            title: Healing drives
+            gridPos:
+              h: 5
+              w: 6
+              x: 18
+              y: 18
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_erasure_set_healing_drives_count{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: orange
+                    value: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+          - id: 13
+            type: row
+            title: Traffic
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 23
+            panels: []
+          - id: 14
+            type: timeseries
+            title: Requests by status
+            gridPos:
+              h: 9
+              w: 8
+              x: 0
+              y: 24
+            targets:
+            - refId: A
+              expr: sum by (status_class) (rate(rustfs_http_server_request_duration_seconds_count{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: "{{ '{{status_class}}' }}"
+            fieldConfig:
+              defaults:
+                unit: reqps
+              overrides: []
+          - id: 15
+            type: timeseries
+            title: Mean request latency
+            gridPos:
+              h: 9
+              w: 8
+              x: 8
+              y: 24
+            targets:
+            - refId: A
+              expr: sum(rate(rustfs_http_server_request_duration_seconds_sum{exordos_s3_instance="$s3"}[5m])) / sum(rate(rustfs_http_server_request_duration_seconds_count{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: mean
+            fieldConfig:
+              defaults:
+                unit: s
+              overrides: []
+            description: 'A mean, not quantiles: RustFS 1.0.0-beta.4 buckets this histogram on millisecond bounds while recording seconds, so every request lands in the first bucket.'
+          - id: 16
+            type: timeseries
+            title: Sent and in flight
+            gridPos:
+              h: 9
+              w: 8
+              x: 16
+              y: 24
+            targets:
+            - refId: A
+              expr: sum(rate(rustfs_http_server_response_body_bytes_total{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: sent
+            - refId: B
+              expr: sum(rustfs_http_server_active_requests{exordos_s3_instance="$s3"})
+              legendFormat: in flight
+            fieldConfig:
+              defaults:
+                unit: Bps
+              overrides:
+              - matcher:
+                  id: byName
+                  options: in flight
+                properties:
+                - id: unit
+                  value: short
+                - id: custom.axisPlacement
+                  value: right
+            description: Response bytes per second; requests in flight on the right axis.
+          - id: 17
+            type: row
+            title: Data safety
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 33
+            panels: []
+          - id: 18
+            type: stat
+            title: Drive losses tolerated
+            gridPos:
+              h: 5
+              w: 6
+              x: 0
+              y: 34
+            targets:
+            - refId: A
+              expr: (min(rustfs_cluster_erasure_set_write_tolerance{exordos_s3_instance="$s3"}) and on() max(rustfs_cluster_erasure_set_size{exordos_s3_instance="$s3"}) > 1) or on() (max(rustfs_cluster_erasure_set_size{exordos_s3_instance="$s3"}) == 1) * 0 - 1
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                color:
+                  mode: fixed
+                  fixedColor: green
+                mappings:
+                - type: value
+                  options:
+                    '0':
+                      color: red
+                      index: 0
+                    '-1':
+                      text: single drive
+                      color: text
+                      index: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+            description: How many more drives the weakest erasure set can lose and still accept writes. At 0 the next lost drive stops writes. A single-node instance has one drive and no such margin.
+          - id: 19
+            type: stat
+            title: Objects waiting for repair
+            gridPos:
+              h: 5
+              w: 6
+              x: 6
+              y: 34
+            targets:
+            - refId: A
+              expr: sum(rustfs_heal_mrf_queue_depth{exordos_s3_instance="$s3"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: orange
+                    value: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: area
+            description: Objects written while a drive was missing (the MRF queue of every node). Until they are healed they carry fewer shards than the parity promises.
+          - id: 20
+            type: timeseries
+            title: Write quorum failures
+            gridPos:
+              h: 5
+              w: 12
+              x: 12
+              y: 34
+            targets:
+            - refId: A
+              expr: sum by (stage) (rate(rustfs_system_storage_erasure_write_quorum_failures_total{exordos_s3_instance="$s3"}[5m])) or on() label_replace((max(rustfs_cluster_capacity_raw_total_bytes{exordos_s3_instance="$s3"}) * 0), "stage", "none", "", "")
+              legendFormat: "{{ '{{stage}}' }}"
+            fieldConfig:
+              defaults:
+                unit: ops
+              overrides: []
+            description: Writes that could not reach enough drives; the client got an error.
+          - id: 21
+            type: stat
+            title: Nodes offline
+            gridPos:
+              h: 5
+              w: 6
+              x: 0
+              y: 39
+            targets:
+            - refId: A
+              expr: max(rustfs_cluster_servers_offline_total{exordos_s3_instance="$s3"}) or on() (max(rustfs_cluster_capacity_raw_total_bytes{exordos_s3_instance="$s3"}) * 0)
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: red
+                    value: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+            description: RustFS nodes the others cannot reach. Always 0 on a single-node instance.
+          - id: 22
+            type: timeseries
+            title: Internode errors
+            gridPos:
+              h: 5
+              w: 12
+              x: 6
+              y: 39
+            targets:
+            - refId: A
+              expr: sum by (rustfs.node) (rate(rustfs_system_network_internode_errors_total{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: "{{ '{{rustfs.node}}' }}"
+            fieldConfig:
+              defaults:
+                unit: ops
+              overrides: []
+            description: Failed calls between the nodes of a distributed instance, by the node that made them.
+          - id: 36
+            type: stat
+            title: Free inodes, lowest node
+            gridPos:
+              h: 5
+              w: 6
+              x: 18
+              y: 39
+            targets:
+            - refId: A
+              expr: 100 * min(node_filesystem_files_free{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"} / node_filesystem_files{mountpoint="/var/lib/rustfs/data",instance=~"s3aas-dp-$s3-node-.+"})
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: percent
+                decimals: 1
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: red
+                    value: null
+                  - color: orange
+                    value: 10
+                  - color: green
+                    value: 25
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: area
+            description: Every object takes inodes on each drive. Many small objects can run the data disk out of inodes while bytes are still free; XFS grows the inode count with free space, but only up to a share of the disk.
+          - id: 23
+            type: row
+            title: Usage accounting
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 44
+            panels: []
+          - id: 24
+            type: stat
+            title: Last scanner cycle
+            gridPos:
+              h: 5
+              w: 6
+              x: 0
+              y: 45
+            targets:
+            - refId: A
+              expr: rustfs_scanner_last_cycle_result{exordos_s3_instance="$s3"}
+              legendFormat: "{{ '{{rustfs.node}}' }}"
+            fieldConfig:
+              defaults:
+                unit: short
+                mappings:
+                - type: value
+                  options:
+                    '0':
+                      text: unknown
+                      color: text
+                    '1':
+                      text: success
+                      color: green
+                    '2':
+                      text: error
+                      color: red
+                    '3':
+                      text: partial
+                      color: orange
+                    '4':
+                      text: superseded
+                      color: orange
+                    '5':
+                      text: deferred
+                      color: orange
+              overrides: []
+            options:
+              textMode: value_and_name
+              colorMode: background
+              graphMode: none
+            description: How the last scanner cycle of each node ended. The scanner counts bucket usage, which quotas and object counts depend on.
+          - id: 25
+            type: stat
+            title: Usage last saved
+            gridPos:
+              h: 5
+              w: 6
+              x: 6
+              y: 45
+            targets:
+            - refId: A
+              expr: (time() - max(rustfs_scanner_usage_last_durable_success_unix_seconds{exordos_s3_instance="$s3"} > 0)) or vector(-1)
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: s
+                mappings:
+                - type: value
+                  options:
+                    '-1':
+                      text: never
+                      color: red
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: orange
+                    value: 3600
+                  - color: red
+                    value: 86400
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+            description: Time since bucket usage was last saved. While it is stale, quotas are checked against old sizes; a bucket that got its quota after that refuses writes with 503.
+          - id: 26
+            type: stat
+            title: Usage snapshot converged
+            gridPos:
+              h: 5
+              w: 6
+              x: 12
+              y: 45
+            targets:
+            - refId: A
+              expr: min(rustfs_cluster_usage_objects_snapshot_converged{exordos_s3_instance="$s3"}) or vector(-1)
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: short
+                mappings:
+                - type: value
+                  options:
+                    '0':
+                      text: 'no'
+                      color: orange
+                    '1':
+                      text: 'yes'
+                      color: green
+                    '-1':
+                      text: unknown
+                      color: orange
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+            description: Whether object and bucket counts come from a complete scan.
+          - id: 27
+            type: timeseries
+            title: Quota checks failed
+            gridPos:
+              h: 5
+              w: 6
+              x: 18
+              y: 45
+            targets:
+            - refId: A
+              expr: sum(rate(rustfs_bucket_quota_check_failed_total{exordos_s3_instance="$s3"}[5m])) or on() (max(rustfs_cluster_capacity_raw_total_bytes{exordos_s3_instance="$s3"}) * 0)
+              legendFormat: failed
+            fieldConfig:
+              defaults:
+                unit: ops
+              overrides: []
+            description: Writes refused because the quota could not be checked (503), not because it was exceeded.
+          - id: 28
+            type: row
+            title: Buckets
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 50
+            panels: []
+          - id: 29
+            type: table
+            title: Buckets
+            gridPos:
+              h: 9
+              w: 24
+              x: 0
+              y: 51
+            targets:
+            - refId: A
+              expr: max by (bucket) (rustfs_bucket_usage_usage_bytes{exordos_s3_instance="$s3"})
+              format: table
+              instant: true
+            - refId: B
+              expr: max by (bucket) (rustfs_bucket_usage_objects_total{exordos_s3_instance="$s3"})
+              format: table
+              instant: true
+            - refId: C
+              expr: max by (bucket) (rustfs_bucket_usage_quota_bytes{exordos_s3_instance="$s3"})
+              format: table
+              instant: true
+            - refId: D
+              expr: 100 * max by (bucket) (rustfs_bucket_usage_usage_bytes{exordos_s3_instance="$s3"}) / max by (bucket) (rustfs_bucket_usage_quota_bytes{exordos_s3_instance="$s3"} > 0)
+              format: table
+              instant: true
+            transformations:
+            - id: merge
+              options: {}
+            - id: organize
+              options:
+                excludeByName:
+                  Time: true
+                renameByName:
+                  bucket: Bucket
+                  'Value #A': Size
+                  'Value #B': Objects
+                  'Value #C': Quota
+                  'Value #D': Quota used
+            fieldConfig:
+              defaults: {}
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Size
+                properties:
+                - id: unit
+                  value: bytes
+              - matcher:
+                  id: byName
+                  options: Quota
+                properties:
+                - id: unit
+                  value: bytes
+                - id: mappings
+                  value:
+                  - type: value
+                    options:
+                      '0':
+                        text: none
+              - matcher:
+                  id: byName
+                  options: Quota used
+                properties:
+                - id: unit
+                  value: percent
+                - id: custom.cellOptions
+                  value:
+                    type: gauge
+                    mode: basic
+                - id: max
+                  value: 100
+            options:
+              sortBy:
+              - displayName: Size
+                desc: true
+            description: As of the last usage snapshot. A quota of 0 means none.
+          - id: 30
+            type: row
+            title: Operations
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 60
+            panels: []
+          - id: 31
+            type: timeseries
+            title: Requests by operation
+            gridPos:
+              h: 9
+              w: 16
+              x: 0
+              y: 61
+            targets:
+            - refId: A
+              expr: sum by (op) (rate(rustfs_s3_operations_total{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: "{{ '{{op}}' }}"
+            fieldConfig:
+              defaults:
+                unit: reqps
+              overrides: []
+          - id: 32
+            type: stat
+            title: Server errors
+            gridPos:
+              h: 9
+              w: 8
+              x: 16
+              y: 61
+            targets:
+            - refId: A
+              expr: 100 * (sum(rate(rustfs_http_server_request_duration_seconds_count{exordos_s3_instance="$s3",status_class="5xx"}[5m])) or vector(0)) / sum(rate(rustfs_http_server_request_duration_seconds_count{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: ''
+            fieldConfig:
+              defaults:
+                unit: percent
+                decimals: 2
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: null
+                  - color: orange
+                    value: 0.5
+                  - color: red
+                    value: 5
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: area
+            description: Share of requests answered with 5xx.
+          - id: 33
+            type: row
+            title: Process
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 70
+            panels: []
+          - id: 34
+            type: timeseries
+            title: RustFS memory per node
+            gridPos:
+              h: 9
+              w: 12
+              x: 0
+              y: 71
+            targets:
+            - refId: A
+              expr: max by (rustfs.node) (rustfs_memory_process_resident_bytes{exordos_s3_instance="$s3"})
+              legendFormat: "{{ '{{rustfs.node}}' }}"
+            - refId: B
+              expr: max(rustfs_memory_total_bytes{exordos_s3_instance="$s3"})
+              legendFormat: node RAM
+            fieldConfig:
+              defaults:
+                unit: bytes
+                min: 0
+              overrides:
+              - matcher:
+                  id: byName
+                  options: node RAM
+                properties:
+                - id: custom.lineStyle
+                  value:
+                    fill: dash
+                    dash:
+                    - 10
+                    - 10
+            description: Resident memory of RustFS against the RAM of a node.
+          - id: 35
+            type: timeseries
+            title: Restarts and OOM kills
+            gridPos:
+              h: 9
+              w: 12
+              x: 12
+              y: 71
+            targets:
+            - refId: A
+              expr: sum by (rustfs.node) (changes(rustfs_system_process_start_time_seconds{exordos_s3_instance="$s3"}[1h]))
+              legendFormat: "restarts {{ '{{rustfs.node}}' }}"
+            - refId: B
+              expr: sum by (instance) (increase(node_vmstat_oom_kill{instance=~"s3aas-dp-$s3-node-.+"}[1h]))
+              legendFormat: "OOM kills {{ '{{instance}}' }}"
+            fieldConfig:
+              defaults:
+                unit: short
+                min: 0
+              overrides: []
+            description: RustFS restarts per node over the last hour, and processes the kernel killed for lack of memory.
+
+  $s3_dashboard.imports.$grafana_instance.dashboards:
+    s3_binding:
+      name: "s3"
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      instance: $s3_dashboard.imports.$grafana_instance:uuid
+      folder: "S3"
+      version_ref: $grafanaaas.types.grafana.dashboards.$s3:version_ref
+
+imports:
+  grafana_instance:
+    element: "$observability"
+    kind: "resource"
+    link: "$grafanaaas.types.grafana.instances.$grafana"

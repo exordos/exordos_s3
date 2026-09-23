@@ -315,6 +315,9 @@ cluster over `nodes_number` nodes (4 to 16, one data disk each):
 See [docs/clustering.md](docs/clustering.md) for how a cluster is laid out,
 what its status means and how it is operated.
 
+See [docs/monitoring.md](docs/monitoring.md) for the metrics the nodes send
+to the observability element and how to query how full the disks are.
+
 ## Troubleshooting
 
 ### Instance stuck in CREATING
