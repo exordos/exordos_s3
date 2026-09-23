@@ -43,6 +43,7 @@ build:
       - name: exordos-metapaas-s3-dp
         format: GEN_IMG_FORMAT_CORE=zst
         profile: exordos_base
+        profile_version: "1.3.3"
         script: images/dp_install.sh
         override:
           disk_size: "6G"
