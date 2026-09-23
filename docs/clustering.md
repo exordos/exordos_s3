@@ -106,11 +106,14 @@ own status, and membership drift makes it `ERROR`.
 
 - **Upgrading the element re-images every node.** The image URL lives in the
   version record, and each node is re-imaged as the instance is actualized.
-  Data survives on the separate data disk, except for the most recent writes:
-  the node is destroyed rather than shut down, and RustFS does not fsync a
-  PUT, so an object written in the last seconds before that is lost. Measured
-  on the stand: an object written at the moment of the destroy was gone
-  afterwards, one written a minute earlier survived.
+  Data survives on the separate data disk. The node is destroyed rather than
+  shut down, which cost the most recent writes on RustFS 1.0.0-beta.4: it did
+  not fsync the directory of a new object, and an object written at the moment
+  of the destroy was gone afterwards. RustFS 1.0.0 syncs it, and new buckets
+  are kept on the strict durability mode (`RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit`)
+  rather than the relaxed one 1.0 seeds by default; the hard-kill case has not
+  been measured again. Upgrading 1.0.0-beta.4 to 1.0.0 kept every object of a
+  single node and of a 4-node cluster.
 - **Growing the data disk keeps the cluster serving.** The disk and its
   filesystem grow in place, no node reboots, and the instance stays `ACTIVE`.
 - **RustFS ignores SIGTERM while it waits for its peers at start.** The systemd

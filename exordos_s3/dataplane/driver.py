@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import typing as tp
 import urllib.parse
 
@@ -57,6 +58,16 @@ SYSTEM_POLICIES = {
 
 # Message RustFS returns when a delete targets a built-in policy.
 SYSTEM_POLICY_DELETE_ERROR = "system policy can not be deleted"
+
+# Scanner state RustFS 1.0 reports when the usage floor persisted by an older
+# release carries no authoritative baseline. The scanner stays stopped for good,
+# and with it object counts, bucket usage and quota checks, until the usage state
+# is rebuilt. Every instance upgraded from 1.0.0-beta.4 lands here.
+SCANNER_USAGE_FLOOR_FAILED = "usage_floor_load_failed"
+# How often a node checks its scanner: the status is a few KB and the state
+# only goes bad across a restart.
+SCANNER_CHECK_INTERVAL = 300
+_scanner_checked_at: float | None = None
 
 
 def _normalize_actual_policy(policy):
@@ -441,20 +452,24 @@ class AdminClient(singletons.InheritSingleton):
             raise
 
     def get_bucket_quota(self, bucket_name):
-        """Get bucket quota in bytes. Returns 0 if no quota set."""
+        """Get bucket quota in bytes: 0 if none is set, None if unknown.
+
+        Reads the MinIO-compatible endpoint, which returns the configured quota
+        alone: RustFS 1.0 answers ``/quota/<bucket>`` with 503 until its scanner
+        has counted the usage of the bucket, and after an upgrade from
+        1.0.0-beta.4 the scanner never does.
+        """
         try:
             encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
-            resp = self._admin_request("GET", f"/quota/{encoded_bucket}")
+            resp = self._admin_request(
+                "GET", f"/get-bucket-quota?bucket={encoded_bucket}"
+            )
             data = resp.json()
             # RustFS returns {"quota": <bytes>, "size": <bytes>, "quotatype": "hard"}
             return data.get("quota", 0) or 0
         except Exception:
-            LOG.debug(
-                "Failed to get quota for bucket %s, assuming no quota",
-                bucket_name,
-                exc_info=True,
-            )
-            return 0
+            LOG.debug("Can't read the quota of bucket %s", bucket_name, exc_info=True)
+            return None
 
     def clear_bucket_quota(self, bucket_name):
         """Remove bucket quota."""
@@ -466,6 +481,19 @@ class AdminClient(singletons.InheritSingleton):
             LOG.warning(
                 "Failed to clear quota for bucket %s", bucket_name, exc_info=True
             )
+
+    # -- Scanner (admin API) --
+
+    def scanner_state(self) -> str | None:
+        """Return the scanner state of the local RustFS process."""
+        resp = self._admin_request("GET", "/scanner/status")
+        return resp.json().get("metrics", {}).get("leader_lock_state")
+
+    def rebuild_scanner_usage(self) -> None:
+        """Drop the persisted usage state and have the scanner count afresh."""
+        self._admin_request(
+            "POST", "/scanner/usage-state/reset", json_data={"mode": "full-rebuild"}
+        )
 
     # -- Policy operations (admin API) --
 
@@ -682,9 +710,17 @@ class S3Instance(meta.MetaDataPlaneModel):
 
             target_quota = b.get("quota_bytes", 0)
             actual_quota = self.mc.get_bucket_quota(bname)
-            if actual_quota != target_quota:
+            if actual_quota is not None and actual_quota != target_quota:
                 if target_quota > 0:
-                    self.mc.set_bucket_quota(bname, target_quota)
+                    # RustFS 1.0 refuses to set a quota for a few seconds
+                    # after start; the next pass sets it again.
+                    try:
+                        self.mc.set_bucket_quota(bname, target_quota)
+                    except Exception:
+                        LOG.warning(
+                            "Quota of bucket %s is not set, retrying on the next pass",
+                            bname,
+                        )
                 else:
                     self.mc.clear_bucket_quota(bname)
 
@@ -744,6 +780,31 @@ class S3Instance(meta.MetaDataPlaneModel):
             LOG.debug("RustFS is not answering its readiness probe", exc_info=True)
             self.ready = False
 
+    def _recover_scanner(self) -> None:
+        # Checked on the read path: after an upgrade the node reinstalls with
+        # its IAM and buckets already in place, so nothing is applied and the
+        # apply path never runs again.
+        global _scanner_checked_at
+        now = time.monotonic()
+        if (
+            _scanner_checked_at is not None
+            and now - _scanner_checked_at < SCANNER_CHECK_INTERVAL
+        ):
+            return
+        _scanner_checked_at = now
+
+        try:
+            if self.mc.scanner_state() != SCANNER_USAGE_FLOOR_FAILED:
+                return
+            LOG.warning(
+                "RustFS scanner of instance %s stopped on a usage floor it "
+                "can't load, rebuilding the usage state",
+                self.uuid,
+            )
+            self.mc.rebuild_scanner_usage()
+        except Exception:
+            LOG.warning("Can't check the RustFS scanner", exc_info=True)
+
     def restore_from_dp(self) -> None:
         self._fill_ready()
         # A node that does not serve yet answers the admin API with 503. Failing
@@ -752,6 +813,7 @@ class S3Instance(meta.MetaDataPlaneModel):
         # triggers is a no-op until the node serves.
         if not self.ready:
             return
+        self._recover_scanner()
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()

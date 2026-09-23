@@ -35,23 +35,41 @@ sudo apt dist-upgrade -y
 sudo apt install -y \
     libev-dev unzip
 
-# Install rustfs binary
+# Install rustfs binary. The version is pinned and checked: a "latest" archive
+# silently moves (or silently doesn't), and both architectures must run the
+# same release.
+RUSTFS_VERSION="1.0.1-preview.10"
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64)
-        RUSTFS_PKG_URL="https://repo.exordos.com/rustfs/rustfs-linux-x86_64-gnu-latest.zip"
+        RUSTFS_SHA256="baa6731ec86314fb766b909f1e6176f9190a356f73ebcd5a77623a631f6d212e"
         ;;
     aarch64)
-        RUSTFS_PKG_URL="https://dl.rustfs.com/artifacts/rustfs/release/rustfs-linux-aarch64-gnu-latest.zip"
+        RUSTFS_SHA256="ebcf7dd1c53acfde71a6d4f3a2aa74715036b6bd8d538dda2b743de37e791078"
         ;;
     *)
         echo "Unsupported CPU architecture: $ARCH" >&2
         exit 1
         ;;
 esac
+RUSTFS_PKG="rustfs-linux-${ARCH}-gnu-v${RUSTFS_VERSION}.zip"
+RUSTFS_PKG_URLS=(
+    "https://dl.rustfs.com/artifacts/rustfs/release/${RUSTFS_PKG}"
+    "https://github.com/rustfs/rustfs/releases/download/${RUSTFS_VERSION}/${RUSTFS_PKG}"
+)
 
 TMP_DIR=$(mktemp -d)
-curl -L -o "$TMP_DIR/rustfs.zip" "$RUSTFS_PKG_URL"
+for url in "${RUSTFS_PKG_URLS[@]}"; do
+    if curl -fL --retry 3 -o "$TMP_DIR/rustfs.zip" "$url" &&
+        echo "$RUSTFS_SHA256  $TMP_DIR/rustfs.zip" | sha256sum -c -; then
+        break
+    fi
+    rm -f "$TMP_DIR/rustfs.zip"
+done
+if [ ! -f "$TMP_DIR/rustfs.zip" ]; then
+    echo "Can't download RustFS $RUSTFS_VERSION" >&2
+    exit 1
+fi
 unzip "$TMP_DIR/rustfs.zip" -d "$TMP_DIR"
 RUSTFS_BIN=$(find "$TMP_DIR" -type f -name rustfs | head -n1)
 sudo cp "$RUSTFS_BIN" /usr/bin/rustfs
