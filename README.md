@@ -333,22 +333,14 @@ directory, returns everything. `test_listing.py` reproduces it.
 ### Writes to a bucket with a quota fail with 503 after an upgrade
 
 After an instance is upgraded from RustFS 1.0.0-beta.4, the RustFS scanner
-stops on the usage it inherited (`usage_floor_load_failed` in the journal)
-and never counts bucket usage again. Buckets that had a quota before the
-upgrade are checked against that frozen usage. Every write to a bucket that
-gets a quota after the upgrade is refused with 503 "Bucket quota check
-temporarily unavailable". To have the scanner count all buckets again, send
-this admin call to the first node, signed with `RUSTFS_ACCESS_KEY` and
-`RUSTFS_SECRET_KEY` from `/etc/exordos_metapaas/rustfs.env`:
-
-```bash
-awscurl --service s3 --access_key <key> --secret_key <secret> \
-  -X POST -d '{"mode":"full-rebuild"}' \
-  http://<node>:9000/rustfs/admin/v3/scanner/usage-state/reset
-```
-
-Writes go through again once the scanner has finished a full pass, which on
-a big bucket can take hours.
+stops on the usage it inherited (`usage_floor_load_failed` in the journal).
+The node agent notices it within five minutes of the node serving again and
+has the usage rebuilt from scratch (`POST
+/rustfs/admin/v3/scanner/usage-state/reset` with mode `full-rebuild`),
+logging "rebuilding the usage state". Until the scanner has finished that
+first full pass, which on a big bucket can take hours, object counts and
+bucket usage stay frozen and every write to a bucket that got a quota after
+the upgrade is refused with 503 "Bucket quota check temporarily unavailable".
 
 ### Instance stuck in CREATING
 

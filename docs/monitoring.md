@@ -80,7 +80,8 @@ folder of the shared observability Grafana, per project and instance:
   write quorum failures, nodes offline, internode errors, free inodes;
 - usage accounting: the last scanner cycle, when bucket usage was last saved
   and whether it converged, quota checks that failed. Quotas and object counts
-  depend on it; after an upgrade from 1.0.0-beta.4 it shows `never`;
+  depend on it; after an upgrade from 1.0.0-beta.4 it shows `never` until
+  the node agent has the usage rebuilt and the scanner finishes a full pass;
 - buckets: size, objects and quota fill of each bucket;
 - traffic and operations: requests by status and S3 operation, share of 5xx,
   mean latency, bytes sent;
