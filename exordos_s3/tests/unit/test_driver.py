@@ -304,3 +304,60 @@ class TestReadinessOnApply:
 
         assert instance.ready is False
         instance.mc.list_policies.assert_not_called()
+
+
+class TestScannerRecovery:
+    @pytest.fixture(autouse=True)
+    def _fresh_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(driver, "_scanner_checked_at", None)
+
+    def _instance(self, state: str | None) -> driver.S3Instance:
+        with mock.patch.object(driver, "AdminClient"):
+            instance = driver.S3Instance(uuid=uuid.uuid4(), name="s3")
+        instance.mc.scanner_state.return_value = state
+        return instance
+
+    def test_a_scanner_stopped_on_the_usage_floor_is_rebuilt(self) -> None:
+        instance = self._instance(driver.SCANNER_USAGE_FLOOR_FAILED)
+
+        instance._recover_scanner()
+
+        instance.mc.rebuild_scanner_usage.assert_called_once_with()
+
+    def test_a_running_scanner_is_left_alone(self) -> None:
+        instance = self._instance("held")
+
+        instance._recover_scanner()
+
+        instance.mc.rebuild_scanner_usage.assert_not_called()
+
+    def test_the_scanner_is_checked_once_per_interval(self) -> None:
+        instance = self._instance("held")
+
+        instance._recover_scanner()
+        instance._recover_scanner()
+
+        instance.mc.scanner_state.assert_called_once_with()
+
+    def test_a_failed_check_does_not_fail_the_read(self) -> None:
+        instance = self._instance(None)
+        instance.mc.scanner_state.side_effect = requests.ConnectionError()
+
+        instance._recover_scanner()
+
+        instance.mc.rebuild_scanner_usage.assert_not_called()
+
+    def test_an_unready_node_does_not_touch_the_scanner(self) -> None:
+        instance = self._instance(driver.SCANNER_USAGE_FLOOR_FAILED)
+        response = requests.Response()
+        response.status_code = 503
+
+        with (
+            mock.patch.object(driver.requests, "get", return_value=response),
+            mock.patch.object(instance, "_fill_actual_policies"),
+            mock.patch.object(instance, "_fill_actual_users"),
+            mock.patch.object(instance, "_fill_actual_buckets"),
+        ):
+            instance.restore_from_dp()
+
+        instance.mc.scanner_state.assert_not_called()
