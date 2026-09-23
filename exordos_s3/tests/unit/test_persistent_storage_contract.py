@@ -51,6 +51,56 @@ def test_image_install_enables_but_does_not_start_dataplane_agent() -> None:
     ]
 
 
+def test_rustfs_syncs_cluster_hosts_before_start() -> None:
+    unit = _unit("exordos-metapaas-rustfs.service")
+    install = (REPOSITORY_ROOT / "exordos/images/dp_install.sh").read_text()
+
+    assert unit["Service"]["ExecStartPre"] == "+/usr/local/bin/exordos-s3-sync-hosts"
+    assert "/usr/local/bin/exordos-s3-sync-hosts" in install
+
+
+def test_rustfs_stuck_at_start_can_be_killed() -> None:
+    unit = _unit("exordos-metapaas-rustfs.service")
+
+    assert unit["Service"].get("SendSIGKILL", "yes") != "no"
+
+
+def _sync_hosts(hosts_file: Path, hosts: str | None) -> None:
+    env = os.environ.copy()
+    env["EXORDOS_S3_HOSTS_FILE"] = str(hosts_file)
+    env.pop("EXORDOS_S3_HOSTS", None)
+    if hosts is not None:
+        env["EXORDOS_S3_HOSTS"] = hosts
+    subprocess.run(
+        ["bash", str(REPOSITORY_ROOT / "exordos/images/sync_hosts.sh")],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_sync_hosts_manages_its_block_only(tmp_path: Path) -> None:
+    hosts_file = tmp_path / "hosts"
+    hosts_file.write_text("127.0.0.1 localhost\n127.0.1.1 self\n")
+
+    _sync_hosts(hosts_file, "10.0.0.1=node1.x,10.0.0.2=node2.x")
+    _sync_hosts(hosts_file, "10.0.0.9=node1.x,10.0.0.2=node2.x")
+
+    assert hosts_file.read_text() == (
+        "127.0.0.1 localhost\n"
+        "127.0.1.1 self\n"
+        "# BEGIN exordos-s3 cluster\n"
+        "10.0.0.9 node1.x\n"
+        "10.0.0.2 node2.x\n"
+        "# END exordos-s3 cluster\n"
+    )
+
+    _sync_hosts(hosts_file, None)
+
+    assert hosts_file.read_text() == "127.0.0.1 localhost\n127.0.1.1 self\n"
+
+
 def test_dataplane_agent_waits_for_bootstrap() -> None:
     unit = _unit("exordos-metapaas-s3-agent.service")
 

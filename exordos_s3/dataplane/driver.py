@@ -536,8 +536,16 @@ class S3Instance(meta.MetaDataPlaneModel):
         ra_types.Enum([s.value for s in pc.InstanceStatus]),
         default=pc.InstanceStatus.ACTIVE.value,
     )
+    # False on every node of a distributed instance but one: they all see the
+    # same RustFS state, and a node holding a stale target would delete what
+    # another one has just created.
+    reconciler = properties.property(ra_types.Boolean(), default=True)
+    # Read from the local RustFS, never sent by the control plane: a cluster
+    # node answers 503 until it has found its peers and loaded IAM.
+    ready = properties.property(ra_types.Boolean(), default=False)
 
-    _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name"}
+    # The flag is not on the data plane, so it has to survive in the meta file
+    _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name", "reconciler"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -701,6 +709,24 @@ class S3Instance(meta.MetaDataPlaneModel):
     # -- MetaDataPlaneModel interface --
 
     def dump_to_dp(self) -> None:
+        # The agent reports the model it applied, not one read back from the
+        # node, so a field that only the node can answer has to be filled
+        # here as well -- otherwise the control plane keeps seeing the value
+        # it sent, and a ready cluster never looks ready.
+        self._fill_ready()
+
+        if not self.reconciler:
+            LOG.debug("Instance %s is reconciled by another node", self.uuid)
+            return
+
+        # Report the node unready rather than fail: a failed create makes the
+        # agent drop the node's report, and the control plane then keeps the
+        # instance status it had. The target is applied by a later update,
+        # once the node reads its actual state back.
+        if not self.ready:
+            LOG.debug("RustFS of instance %s is not ready yet", self.uuid)
+            return
+
         # Fetch actual state once to avoid repeated HTTP calls
         actual_policies = self.mc.list_policies()
         actual_users = self.mc.list_users()
@@ -710,7 +736,22 @@ class S3Instance(meta.MetaDataPlaneModel):
         self._reconcile_users(actual_users)
         self._reconcile_buckets(actual_buckets)
 
+    def _fill_ready(self) -> None:
+        try:
+            resp = requests.get(constants.RUSTFS_READY_URL, timeout=5)
+            self.ready = resp.status_code == 200
+        except requests.RequestException:
+            LOG.debug("RustFS is not answering its readiness probe", exc_info=True)
+            self.ready = False
+
     def restore_from_dp(self) -> None:
+        self._fill_ready()
+        # A node that does not serve yet answers the admin API with 503. Failing
+        # here makes the agent drop the node's report, so report it unready
+        # instead; the empty state then reads as a change, and the update it
+        # triggers is a no-op until the node serves.
+        if not self.ready:
+            return
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()

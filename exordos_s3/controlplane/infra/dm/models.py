@@ -53,6 +53,7 @@ class S3Instance(models.S3Instance, ua_models.InstanceWithDerivativesMixin):
                 "disk_size",
                 "nodes_number",
                 "kind",
+                "parity",
                 "version",
                 "project_id",
             )

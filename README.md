@@ -283,7 +283,37 @@ When creating an S3 instance, specify:
 }
 ```
 
-Configuration is applied to all data-plane nodes in the instance (currently single-node; clustering planned).
+Configuration is applied to all data-plane nodes in the instance.
+
+### Distributed Instances
+
+`kind` is `single_node` by default. A `distributed` instance runs one RustFS
+cluster over `nodes_number` nodes (4 to 16, one data disk each):
+
+```json
+{
+  "name": "my-s3-cluster",
+  "kind": "distributed",
+  "nodes_number": 4,
+  "parity": 1,
+  "cpu": 2,
+  "ram": 4096,
+  "disk_size": 100,
+  "version": "/v1/types/s3/versions/<uuid>"
+}
+```
+
+- `parity` is the erasure-coding parity (`RUSTFS_STORAGE_CLASS_STANDARD=EC:<parity>`),
+  at most `nodes_number / 2`. Leave it out to keep the RustFS default for the
+  set size (2 for 4–5 nodes, 3 for 6–7, 4 for 8 and more).
+- `kind`, `nodes_number` and `parity` are set on create only; `cpu` and `ram` of
+  a distributed instance can't be changed either. `disk_size` can grow.
+- Every node serves the whole S3 API; `ipsv4` lists them in endpoint order.
+- IAM and bucket changes are applied by the first node (`members` ordinal 1)
+  and stall while that node is down; data keeps being served by the rest.
+
+See [docs/clustering.md](docs/clustering.md) for how a cluster is laid out,
+what its status means and how it is operated.
 
 ## Troubleshooting
 

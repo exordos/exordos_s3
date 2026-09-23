@@ -21,6 +21,7 @@ import string
 import typing as tp
 
 from gcl_sdk.agents.universal.dm import models as ua_models
+from restalchemy.common import exceptions as ra_exc
 from restalchemy.dm import filters as dm_filters
 from restalchemy.dm import models
 from restalchemy.dm import properties
@@ -72,6 +73,12 @@ class BucketNameType(types.BaseCompiledRegExpTypeFromAttr):
         return "my-bucket"
 
 
+class S3ValidationError(ra_exc.ValidationErrorException):
+    """The request contradicts the model: a client error, not a failure."""
+
+    message = "%(details)s"
+
+
 class S3Status(str, enum.Enum):
     NEW = "NEW"
     IN_PROGRESS = "IN_PROGRESS"
@@ -81,7 +88,19 @@ class S3Status(str, enum.Enum):
 
 class S3InstanceKind(str, enum.Enum):
     SINGLE_NODE = "single_node"
-    # Future: DISTRIBUTED = "distributed"
+    DISTRIBUTED = "distributed"
+
+
+# RustFS docs require at least four servers for a distributed deployment, and a
+# single erasure set holds at most 16 drives (one drive per node here).
+DISTRIBUTED_MIN_NODES = 4
+DISTRIBUTED_MAX_NODES = 16
+
+# The layout of a distributed instance is fixed at creation: RustFS cannot
+# change the drive count of a pool, and parity only applies to new objects.
+IMMUTABLE_FIELDS = ("kind", "nodes_number", "parity")
+# Changing these reboots every node of the set at once.
+DISTRIBUTED_IMMUTABLE_FIELDS = ("cpu", "ram")
 
 
 class S3RetentionMode(str, enum.Enum):
@@ -127,6 +146,18 @@ class S3Instance(
         types.Enum([k.value for k in S3InstanceKind]),
         default=S3InstanceKind.SINGLE_NODE.value,
     )
+    # Erasure-coding parity (RUSTFS_STORAGE_CLASS_STANDARD=EC:<parity>) of a
+    # distributed instance; None keeps the RustFS default for the set size.
+    parity = properties.property(
+        types.AllowNone(
+            types.Integer(min_value=1, max_value=DISTRIBUTED_MAX_NODES // 2)
+        ),
+        default=None,
+    )
+    # Nodes of a distributed instance by node uuid: {"ordinal": n, "ipv4": ip}.
+    # Ordinals are assigned once and name the RustFS endpoints, so they must
+    # not follow the order of the node set.
+    members = properties.property(types.Dict(), default=dict)
     root_secret = properties.property(
         types.String(min_length=1, max_length=256),
         default=lambda: "".join(
@@ -135,9 +166,30 @@ class S3Instance(
     )
     version = relationships.relationship(S3Version, required=True, read_only=True)
 
+    def is_distributed(self) -> bool:
+        return self.kind == S3InstanceKind.DISTRIBUTED.value
+
     def _validate_kind(self):
-        if self.kind == S3InstanceKind.SINGLE_NODE.value and self.nodes_number != 1:
-            raise ValueError("single_node kind requires nodes_number=1")
+        if self.kind == S3InstanceKind.SINGLE_NODE.value:
+            if self.nodes_number != 1:
+                raise S3ValidationError(
+                    details="single_node kind requires nodes_number=1"
+                )
+            if self.parity is not None:
+                raise S3ValidationError(
+                    details="parity is supported only by the distributed kind"
+                )
+            return
+
+        if not DISTRIBUTED_MIN_NODES <= self.nodes_number <= DISTRIBUTED_MAX_NODES:
+            raise S3ValidationError(
+                details=(
+                    f"distributed kind requires nodes_number between "
+                    f"{DISTRIBUTED_MIN_NODES} and {DISTRIBUTED_MAX_NODES}"
+                )
+            )
+        if self.parity is not None and self.parity > self.nodes_number // 2:
+            raise S3ValidationError(details="parity can't exceed half of nodes_number")
 
     def insert(self, session=None):
         self._validate_kind()
@@ -161,7 +213,14 @@ class S3Instance(
     def _validate_update(self, session=None):
         disk_size = self.properties["disk_size"]
         if disk_size.is_dirty() and disk_size.old_value > self.disk_size:
-            raise ValueError("disk_size shrink is not supported yet")
+            raise S3ValidationError(details="disk_size shrink is not supported yet")
+
+        immutable = IMMUTABLE_FIELDS
+        if self.is_distributed():
+            immutable += DISTRIBUTED_IMMUTABLE_FIELDS
+        for name in immutable:
+            if self.properties[name].is_dirty():
+                raise S3ValidationError(details=f"{name} can't be changed")
 
     def update(self, session=None, force=False):
         self._validate_kind()
