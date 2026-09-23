@@ -746,6 +746,12 @@ class S3Instance(meta.MetaDataPlaneModel):
 
     def restore_from_dp(self) -> None:
         self._fill_ready()
+        # A node that does not serve yet answers the admin API with 503. Failing
+        # here makes the agent drop the node's report, so report it unready
+        # instead; the empty state then reads as a change, and the update it
+        # triggers is a no-op until the node serves.
+        if not self.ready:
+            return
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()
