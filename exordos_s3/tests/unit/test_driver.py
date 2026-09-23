@@ -204,3 +204,17 @@ class TestReadinessOnApply:
 
         assert instance.ready is False
         instance.mc.list_policies.assert_not_called()
+
+    def test_an_unready_node_reports_rather_than_fails_on_read(self) -> None:
+        # The read runs every iteration: a 503 from the admin API there drops
+        # the node's report just as a failed create does
+        instance = self._instance()
+        instance.mc.list_policies.side_effect = RuntimeError("503")
+        response = requests.Response()
+        response.status_code = 503
+
+        with mock.patch.object(driver.requests, "get", return_value=response):
+            instance.restore_from_dp()
+
+        assert instance.ready is False
+        instance.mc.list_policies.assert_not_called()
