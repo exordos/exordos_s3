@@ -58,21 +58,25 @@ def distributed_instance(
         "version": f"{s3_conftest.S3_VERSIONS}{s3_version_uuid}",
     }
     instance = s3_api_client.create(s3_conftest.S3_INSTANCES, data=data)
-    yield s3_conftest._poll_instance_status(
-        s3_api_client,
-        instance["uuid"],
-        "ACTIVE",
-        DISTRIBUTED_TIMEOUT,
-        s3_conftest.POLL_INTERVAL,
-    )
-    if os.environ.get("EXORDOS_S3_KEEP_INSTANCES") == "1":
-        # A cluster that misbehaves is only debuggable while its nodes live
-        LOG.warning("Keeping S3 instance %s and its nodes", instance["uuid"])
-        return
+    # A cluster that never turns ACTIVE is removed too: its nodes hold the
+    # storage the next run needs
     try:
-        s3_api_client.delete(s3_conftest.S3_INSTANCES, uuid=instance["uuid"])
-    except Exception:
-        LOG.exception("Failed to clean up S3 instance %s", instance["uuid"])
+        yield s3_conftest._poll_instance_status(
+            s3_api_client,
+            instance["uuid"],
+            "ACTIVE",
+            DISTRIBUTED_TIMEOUT,
+            s3_conftest.POLL_INTERVAL,
+        )
+    finally:
+        if os.environ.get("EXORDOS_S3_KEEP_INSTANCES") == "1":
+            # A cluster that misbehaves is only debuggable while its nodes live
+            LOG.warning("Keeping S3 instance %s and its nodes", instance["uuid"])
+        else:
+            try:
+                s3_api_client.delete(s3_conftest.S3_INSTANCES, uuid=instance["uuid"])
+            except Exception:
+                LOG.exception("Failed to clean up S3 instance %s", instance["uuid"])
 
 
 @pytest.fixture(scope="module")
