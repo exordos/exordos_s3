@@ -719,6 +719,14 @@ class S3Instance(meta.MetaDataPlaneModel):
             LOG.debug("Instance %s is reconciled by another node", self.uuid)
             return
 
+        # Report the node unready rather than fail: a failed create makes the
+        # agent drop the node's report, and the control plane then keeps the
+        # instance status it had. The target is applied by a later update,
+        # once the node reads its actual state back.
+        if not self.ready:
+            LOG.debug("RustFS of instance %s is not ready yet", self.uuid)
+            return
+
         # Fetch actual state once to avoid repeated HTTP calls
         actual_policies = self.mc.list_policies()
         actual_users = self.mc.list_users()
