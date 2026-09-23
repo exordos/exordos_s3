@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import typing as tp
 import urllib.parse
 
@@ -57,6 +58,16 @@ SYSTEM_POLICIES = {
 
 # Message RustFS returns when a delete targets a built-in policy.
 SYSTEM_POLICY_DELETE_ERROR = "system policy can not be deleted"
+
+# Scanner state RustFS 1.0 reports when the usage floor persisted by an older
+# release carries no authoritative baseline. The scanner stays stopped for good,
+# and with it object counts, bucket usage and quota checks, until the usage state
+# is rebuilt. Every instance upgraded from 1.0.0-beta.4 lands here.
+SCANNER_USAGE_FLOOR_FAILED = "usage_floor_load_failed"
+# How often a node checks its scanner: the status is a few KB and the state
+# only goes bad across a restart.
+SCANNER_CHECK_INTERVAL = 300
+_scanner_checked_at: float | None = None
 
 
 def _normalize_actual_policy(policy):
@@ -471,6 +482,19 @@ class AdminClient(singletons.InheritSingleton):
                 "Failed to clear quota for bucket %s", bucket_name, exc_info=True
             )
 
+    # -- Scanner (admin API) --
+
+    def scanner_state(self) -> str | None:
+        """Return the scanner state of the local RustFS process."""
+        resp = self._admin_request("GET", "/scanner/status")
+        return resp.json().get("metrics", {}).get("leader_lock_state")
+
+    def rebuild_scanner_usage(self) -> None:
+        """Drop the persisted usage state and have the scanner count afresh."""
+        self._admin_request(
+            "POST", "/scanner/usage-state/reset", json_data={"mode": "full-rebuild"}
+        )
+
     # -- Policy operations (admin API) --
 
     def list_policies(self):
@@ -756,6 +780,31 @@ class S3Instance(meta.MetaDataPlaneModel):
             LOG.debug("RustFS is not answering its readiness probe", exc_info=True)
             self.ready = False
 
+    def _recover_scanner(self) -> None:
+        # Checked on the read path: after an upgrade the node reinstalls with
+        # its IAM and buckets already in place, so nothing is applied and the
+        # apply path never runs again.
+        global _scanner_checked_at
+        now = time.monotonic()
+        if (
+            _scanner_checked_at is not None
+            and now - _scanner_checked_at < SCANNER_CHECK_INTERVAL
+        ):
+            return
+        _scanner_checked_at = now
+
+        try:
+            if self.mc.scanner_state() != SCANNER_USAGE_FLOOR_FAILED:
+                return
+            LOG.warning(
+                "RustFS scanner of instance %s stopped on a usage floor it "
+                "can't load, rebuilding the usage state",
+                self.uuid,
+            )
+            self.mc.rebuild_scanner_usage()
+        except Exception:
+            LOG.warning("Can't check the RustFS scanner", exc_info=True)
+
     def restore_from_dp(self) -> None:
         self._fill_ready()
         # A node that does not serve yet answers the admin API with 503. Failing
@@ -764,6 +813,7 @@ class S3Instance(meta.MetaDataPlaneModel):
         # triggers is a no-op until the node serves.
         if not self.ready:
             return
+        self._recover_scanner()
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()
