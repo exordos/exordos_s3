@@ -112,7 +112,10 @@ class TestReconciler:
         instance.mc.list_users.return_value = {}
         instance.mc.list_buckets.return_value = {}
 
-        instance.dump_to_dp()
+        with mock.patch.object(
+            instance, "_fill_ready", side_effect=lambda: setattr(instance, "ready", True)
+        ):
+            instance.dump_to_dp()
 
         instance.mc.list_buckets.assert_called_once_with()
 
@@ -187,3 +190,17 @@ class TestReadinessOnApply:
 
         assert instance.ready is True
         instance.mc.list_buckets.assert_not_called()
+
+    def test_an_unready_reconciler_reports_rather_than_fails(self) -> None:
+        # A failed create drops the node's report on the control plane, and
+        # the instance keeps whatever status it had -- ACTIVE after a reinstall
+        instance = self._instance()
+        instance.mc.list_policies.side_effect = RuntimeError("503")
+        response = requests.Response()
+        response.status_code = 503
+
+        with mock.patch.object(driver.requests, "get", return_value=response):
+            instance.dump_to_dp()
+
+        assert instance.ready is False
+        instance.mc.list_policies.assert_not_called()
