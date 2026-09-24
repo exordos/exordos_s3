@@ -2,8 +2,10 @@ name: build
 
 on:
   push:
-  pull_request:
-    types: [opened]
+    branches-ignore:
+      - master
+    tags:
+      - '*'
 
 env:
   TOX_ENV: "py312"
