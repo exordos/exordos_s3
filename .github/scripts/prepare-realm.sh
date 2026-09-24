@@ -25,5 +25,5 @@ if [ -z "$(exordos ee l -o json -f name=metapaas | jq -r '.[0].status // ""')" ]
 else
     echo "The realm already has metapaas"
 fi
-"$here/wait-for-element.sh" metapaas 1800
+"$here/wait-for-element.sh" metapaas 600
 exordos e e show metapaas

@@ -40,7 +40,7 @@ jobs:
     with:
       elements: s3aas
       version: ${{ needs.Build.outputs.version }}
-      element-timeout: 900
+      element-timeout: 600
       ssh: true
       prepare-script: .github/scripts/prepare-realm.sh
       check-script: .github/scripts/run-functional-in-realm.sh
