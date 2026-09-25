@@ -31,12 +31,12 @@ jobs:
           echo "$PUSH_CFG" | base64 -d > exordos/exordos.push.yaml
           exordos push -c exordos/exordos.push.yaml -t local -f --latest
 
-  # End-to-end run on a realm, through exordos_tests' shared workflow: the
+  # End-to-end run on a realm, through exordos_ci's shared workflow: the
   # element built from this commit installed on it, then the functional suite
   # run on the realm itself, where the s3 data plane is reachable.
   E2E:
     needs: Build
-    uses: exordos/exordos_tests/.github/workflows/element_realm_test.yml@realm_ssh_input
+    uses: exordos/exordos_ci/.github/workflows/element_realm_test.yml@master
     with:
       elements: s3aas
       version: ${{ needs.Build.outputs.version }}
@@ -45,5 +45,4 @@ jobs:
       overbook: true
       dependencies: metapaas
       check-script: .github/scripts/run-functional-in-realm.sh
-      tests-ref: realm_ssh_input
     secrets: inherit

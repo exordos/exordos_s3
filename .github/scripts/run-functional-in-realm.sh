@@ -9,7 +9,7 @@
 # there, against the core and the control plane on that VM.
 #
 # REALM_CORE_URL, SSH_KEY, SSH_HOST, SSH_PORT and ADMIN_PASSWORD come from the
-# environment, as exordos_tests' element_realm_test workflow leaves them with
+# environment, as exordos_ci's element_realm_test workflow leaves them with
 # `ssh: true`.
 set -euo pipefail
 
