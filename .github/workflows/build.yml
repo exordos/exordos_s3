@@ -7,29 +7,10 @@ on:
 
 jobs:
   Build:
-    runs-on: [self-hosted, vm]
     if: ${{ github.actor != 'dependabot[bot]' }}
-    outputs:
-      version: ${{ steps.build_element.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Build Element
-        id: build_element
-        env:
-          PUSH_CFG: ${{ secrets.PUSH_CFG }}
-        run: |
-          set -eux
-
-          VERSION="$(exordos get-version .)"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-          exordos build $(pwd)
-
-          # Decode and write the push configuration
-          echo "$PUSH_CFG" | base64 -d > exordos/exordos.push.yaml
-          exordos push -c exordos/exordos.push.yaml -t local -f --latest
+    uses: exordos/exordos_ci/.github/workflows/element_build.yml@master
+    secrets:
+      PUSH_CFG: ${{ secrets.PUSH_CFG }}
 
   # End-to-end run on a realm, through exordos_ci's shared workflow: the
   # element built from this commit installed on it, then the functional suite
