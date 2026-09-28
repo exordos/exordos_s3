@@ -25,7 +25,9 @@ requests, objects and buckets (`rustfs_cluster_*`, `rustfs_system_drive_*`,
 RustFS labels its metrics with the attributes the control plane writes into
 `rustfs.env` (`OTEL_RESOURCE_ATTRIBUTES`). Per node series also carry
 `server`/`drive` (the RustFS endpoint of the drive) and `network.local.address`
-(the node address). Every node of a distributed instance reports the
+(the node address), and RustFS adds `rustfs.cluster.id` (the instance uuid
+again) and `collection_scope`: `local` for a node's own drives, `cluster` for
+its view of the whole cluster. Every node of a distributed instance reports the
 cluster-wide `rustfs_cluster_*` series, so take one of them rather than a sum.
 
 ## How full the disks are
@@ -78,7 +80,8 @@ folder of the shared observability Grafana, per project and instance:
   write quorum failures, nodes offline, internode errors, free inodes;
 - usage accounting: the last scanner cycle, when bucket usage was last saved
   and whether it converged, quota checks that failed. Quotas and object counts
-  depend on it; after an upgrade from 1.0.0-beta.4 it shows `never`;
+  depend on it; after an upgrade from 1.0.0-beta.4 it shows `never` until
+  the node agent has the usage rebuilt and the scanner finishes a full pass;
 - buckets: size, objects and quota fill of each bucket;
 - traffic and operations: requests by status and S3 operation, share of 5xx,
   mean latency, bytes sent;
@@ -88,16 +91,19 @@ The element depends on the `observability` element; install it after that one.
 
 ## Notes
 
-- **The endpoint is the root one on purpose.** RustFS (1.0.0-beta.4, the
-  version the image ships) only turns its stdout exporter off when
+- **The endpoint is the root one on purpose.** RustFS 1.0.0 only
+  turns its stdout exporter off when
   `RUSTFS_OBS_ENDPOINT` is set; with just `RUSTFS_OBS_METRIC_ENDPOINT` it dumps
   every metric to stdout, and so to the journal. Traces and logs are switched
   off explicitly, since vmagent only accepts metrics, and
   `RUSTFS_OBS_LOG_STDOUT_ENABLED` keeps the logs in the journal.
-- **Request latency is a mean.** RustFS 1.0.0-beta.4 buckets
+- **Request latency is a mean.** RustFS 1.0.0 buckets
   `rustfs_http_server_request_duration_seconds` on millisecond bounds while it
   records seconds, so every request lands in the first bucket and quantiles
   mean nothing; divide `_sum` by `_count` instead.
+- **Object and bucket counts arrive in bursts.** RustFS 1.0.0 publishes
+  `rustfs_cluster_usage_*` and `rustfs_cluster_buckets_total` only once a usage
+  snapshot has converged, so query them with `last_over_time`.
 - **Without the observability element RustFS stays quiet.** The failed exports
   are dropped without a log line, and readiness is unaffected.
 - **Changing the labels or the endpoint restarts RustFS** on every node at
