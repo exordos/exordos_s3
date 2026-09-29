@@ -213,7 +213,8 @@ class TestQuotaEnforcement:
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
         # RustFS 1.0.0 answered every write into a bucket with a quota with 503
-        # until it had counted the bucket's usage, which it never did
+        # until it had counted the bucket's usage, which it never did; 1.0.1
+        # does once its scanner completes a first cycle
         bucket_name = f"test-quota-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
             s3_api_client,
@@ -224,7 +225,11 @@ class TestQuotaEnforcement:
             quota_bytes=1024 * 1024,
         )
 
-        s3_probe_client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
+        s3_conftest.wait_for_quota_check(
+            lambda: s3_probe_client.put_object(
+                Bucket=bucket_name, Key="small", Body=b"x" * 100
+            )
+        )
 
         body = s3_probe_client.get_object(Bucket=bucket_name, Key="small")["Body"]
         assert body.read() == b"x" * 100
@@ -246,7 +251,9 @@ class TestQuotaEnforcement:
         client = s3_probe_client
 
         # Small upload should succeed
-        client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
+        s3_conftest.wait_for_quota_check(
+            lambda: client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
+        )
 
         # Large upload should fail
         with pytest.raises(botocore.exceptions.ClientError) as exc_info:
