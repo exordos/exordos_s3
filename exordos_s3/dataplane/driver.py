@@ -482,6 +482,24 @@ class AdminClient(singletons.InheritSingleton):
                 "Failed to clear quota for bucket %s", bucket_name, exc_info=True
             )
 
+    # -- Bucket durability (admin API) --
+
+    def get_bucket_durability(self, bucket_name):
+        """Return the durability override of a bucket: None if it inherits.
+
+        Raises when RustFS does not answer, so an unknown override is never
+        mistaken for none.
+        """
+        encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
+        resp = self._admin_request("GET", f"/bucket-durability/{encoded_bucket}")
+        return resp.json().get("mode")
+
+    def clear_bucket_durability(self, bucket_name):
+        """Drop the override, so the bucket follows the process-wide mode."""
+        encoded_bucket = urllib.parse.quote(bucket_name, safe="-._~")
+        self._admin_request("DELETE", f"/bucket-durability/{encoded_bucket}")
+        LOG.info("Bucket %s durability override cleared", bucket_name)
+
     # -- Scanner (admin API) --
 
     def scanner_state(self) -> str | None:
@@ -724,9 +742,31 @@ class S3Instance(meta.MetaDataPlaneModel):
                 else:
                     self.mc.clear_bucket_quota(bname)
 
+            self._reconcile_bucket_durability(bname)
+
         # Remove buckets no longer in target
         for aname in actual_set - target_buckets:
             self.mc.remove_bucket(aname)
+
+    def _reconcile_bucket_durability(self, bname):
+        # A single power loss on a relaxed bucket can take a key that was
+        # overwritten with all its versions, so every bucket stays on the
+        # process-wide strict mode, whatever set the override.
+        try:
+            mode = self.mc.get_bucket_durability(bname)
+            if mode is not None:
+                LOG.warning(
+                    "Bucket %s has the %s durability override, dropping it",
+                    bname,
+                    mode,
+                )
+                self.mc.clear_bucket_durability(bname)
+        except Exception:
+            LOG.warning(
+                "Durability of bucket %s is not checked, retrying on the next pass",
+                bname,
+                exc_info=True,
+            )
 
     def _fill_actual_buckets(self):
         actual = self.mc.list_buckets()
