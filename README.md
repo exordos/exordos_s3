@@ -319,13 +319,15 @@ what its status means and how it is operated.
 
 ### A recursive listing stops early
 
-RustFS (seen on 1.0.0-beta.4, 1.0.0 and 1.0.1-preview.10) ends a flat
-(recursive, no delimiter) ListObjectsV2 early and still answers
-`IsTruncated=false` when two directories share a name prefix, such as a
-DBaaS backup directory `<id>/` next to `<id>-rollbacks/`: in keys `-` sorts
-before `/`. On the stand a bucket of 104,137 objects listed as 5,000; two such
-directories of 1,200 keys each list as 2,000. Listing with the `/` delimiter, directory by
-directory, returns everything. `test_listing.py` reproduces it.
+RustFS before 1.0.1-preview.11 (seen on 1.0.0-beta.4, 1.0.0 and
+1.0.1-preview.10) ends a flat (recursive, no delimiter) ListObjectsV2 early
+and still answers `IsTruncated=false` when two directories share a name
+prefix, such as a DBaaS backup directory `<id>/` next to `<id>-rollbacks/`:
+in keys `-` sorts before `/`. On the stand a bucket of 104,137 objects listed
+as 5,000; two such directories of 1,200 keys each list as 2,000. Upgrading the
+element to a version on RustFS 1.0.1-preview.11 or later fixes it; until
+then, list with the `/` delimiter, directory by directory.
+`test_listing.py` checks it.
 
 ### Writes to a bucket with a quota fail with 503 after an upgrade
 

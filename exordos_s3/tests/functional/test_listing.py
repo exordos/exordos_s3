@@ -31,9 +31,9 @@ class TestFlatListing:
     def test_flat_listing_returns_every_key(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
-        # RustFS 1.0.0 and 1.0.1-preview.10 return 2000 of these 2400 keys and
-        # answer IsTruncated=false; a bucket of DBaaS backups listed 5000
-        # of its 104137.
+        # RustFS 1.0.0 and 1.0.1-preview.10 returned 2000 of these 2400 keys
+        # and answered IsTruncated=false; a bucket of DBaaS backups listed
+        # 5000 of its 104137. Fixed in 1.0.1-preview.11.
         bucket_name = f"test-list-{uuid.uuid4().hex[:8]}"
         s3_conftest.create_bucket_via_api(
             s3_api_client,
