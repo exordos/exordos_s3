@@ -178,6 +178,57 @@ class TestQuotaReconciliation:
         instance.mc.remove_bucket.assert_called_once_with("gone")
 
 
+class TestBucketDurability:
+    def _instance(self) -> driver.S3Instance:
+        with mock.patch.object(driver, "AdminClient"):
+            instance = driver.S3Instance(
+                uuid=uuid.uuid4(),
+                name="s3",
+                buckets={"b": {}},
+            )
+        instance.mc.get_bucket_state.return_value = {}
+        instance.mc.get_bucket_quota.return_value = 0
+        return instance
+
+    def test_reads_the_override(self) -> None:
+        client = _admin_client()
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b'{"bucket":"b","mode":"relaxed"}'
+        with mock.patch.object(
+            client, "_admin_request", return_value=response
+        ) as request:
+            assert client.get_bucket_durability("b") == "relaxed"
+
+        request.assert_called_once_with("GET", "/bucket-durability/b")
+
+    @pytest.mark.parametrize("mode", ["relaxed", "none", "strict"])
+    def test_override_is_dropped(self, mode: str) -> None:
+        instance = self._instance()
+        instance.mc.get_bucket_durability.return_value = mode
+
+        instance._reconcile_buckets({"b": {}})
+
+        instance.mc.clear_bucket_durability.assert_called_once_with("b")
+
+    def test_inheriting_bucket_is_left_alone(self) -> None:
+        instance = self._instance()
+        instance.mc.get_bucket_durability.return_value = None
+
+        instance._reconcile_buckets({"b": {}})
+
+        instance.mc.clear_bucket_durability.assert_not_called()
+
+    def test_unanswered_durability_does_not_stop_the_pass(self) -> None:
+        instance = self._instance()
+        instance.mc.get_bucket_durability.side_effect = _http_error(503, "boom")
+
+        instance._reconcile_buckets({"b": {}, "gone": {}})
+
+        instance.mc.clear_bucket_durability.assert_not_called()
+        instance.mc.remove_bucket.assert_called_once_with("gone")
+
+
 class TestReconciler:
     def _instance(self, **kwargs: tp.Any) -> driver.S3Instance:
         with mock.patch.object(driver, "AdminClient"):
