@@ -109,11 +109,17 @@ own status, and membership drift makes it `ERROR`.
   Data survives on the separate data disk. The node is destroyed rather than
   shut down, which cost the most recent writes on RustFS 1.0.0-beta.4: it did
   not fsync the directory of a new object, and an object written at the moment
-  of the destroy was gone afterwards. RustFS 1.0.0 syncs it, and new buckets
-  are kept on the strict durability mode (`RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit`)
-  rather than the relaxed one 1.0 seeds by default; the hard-kill case has not
-  been measured again. Upgrading 1.0.0-beta.4 to 1.0.0 kept every object of a
-  single node and of a 4-node cluster.
+  of the destroy was gone afterwards. An instance still on 1.0.0-beta.4 (the
+  element 0.1.2 or older) is therefore stopped by hand before the upgrade, on
+  every node: `systemctl stop exordos-metapaas-rustfs && sync`. Otherwise
+  objects written in the last seconds before the destroy are left with an empty
+  `xl.meta`, which RustFS 1.0 can neither read nor delete, and a single one
+  stops its scanner from publishing usage. RustFS 1.0.0 syncs the directory,
+  and new buckets are kept on the strict durability mode
+  (`RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit`) rather than the relaxed one 1.0
+  seeds by default; the hard-kill case has not been measured again. Upgrading
+  1.0.0-beta.4 to 1.0.0 kept every object of a single node and of a 4-node
+  cluster.
 - **Growing the data disk keeps the cluster serving.** The disk and its
   filesystem grow in place, no node reboots, and the instance stays `ACTIVE`.
 - **RustFS ignores SIGTERM while it waits for its peers at start.** The systemd
