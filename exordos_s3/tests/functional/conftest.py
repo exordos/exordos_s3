@@ -592,6 +592,23 @@ def wait_until_allowed(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
             time.sleep(interval)
 
 
+def wait_for_quota_check(operation, timeout=180, interval=SYNC_INTERVAL):
+    """Run a write into a bucket with a quota, and return its result.
+
+    RustFS refuses such writes with 503 until its scanner has published the
+    usage of the instance, which on a fresh instance takes a first cycle.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return operation()
+        except botocore.exceptions.ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code != "ServiceUnavailable" or time.monotonic() >= deadline:
+                raise
+            time.sleep(interval)
+
+
 def make_s3_client(s3_endpoint, access_key, secret_key):
     return boto3.client(
         "s3",
