@@ -329,18 +329,6 @@ element to a version on RustFS 1.0.1-preview.11 or later fixes it; until
 then, list with the `/` delimiter, directory by directory.
 `test_listing.py` checks it.
 
-### Writes to a bucket with a quota fail with 503 after an upgrade
-
-After an instance is upgraded from RustFS 1.0.0-beta.4, the RustFS scanner
-stops on the usage it inherited (`usage_floor_load_failed` in the journal).
-The node agent notices it within five minutes of the node serving again and
-has the usage rebuilt from scratch (`POST
-/rustfs/admin/v3/scanner/usage-state/reset` with mode `full-rebuild`),
-logging "rebuilding the usage state". Until the scanner has finished that
-first full pass, which on a big bucket can take hours, object counts and
-bucket usage stay frozen and every write to a bucket that got a quota after
-the upgrade is refused with 503 "Bucket quota check temporarily unavailable".
-
 ### Instance stuck in CREATING
 
 Check PluginReconciler logs on metapaas-cp:
