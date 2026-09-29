@@ -16,6 +16,7 @@
 """Basic CRUD integration tests — instance lifecycle, bucket creation, and
 S3 data operations."""
 
+import time
 import uuid
 
 from bazooka import exceptions as bazooka_exc
@@ -199,9 +200,14 @@ class TestS3DataOperations:
             client, bucket_name, "public-obj", b"public-data"
         )
 
-        # Anonymous GET on public bucket should work
+        # Anonymous GET on public bucket should work. The dataplane serves
+        # the bucket a moment before it applies the public policy.
         url = f"http://{s3_endpoint}/{bucket_name}/public-obj"
+        deadline = time.monotonic() + s3_conftest.SYNC_TIMEOUT
         resp = requests.get(url, timeout=10)
+        while resp.status_code == 403 and time.monotonic() < deadline:
+            time.sleep(s3_conftest.SYNC_INTERVAL)
+            resp = requests.get(url, timeout=10)
         assert resp.status_code == 200
         assert resp.content == b"public-data"
 
