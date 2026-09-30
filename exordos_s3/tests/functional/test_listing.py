@@ -51,8 +51,10 @@ class TestFlatListing:
         with concurrent.futures.ThreadPoolExecutor(16) as pool:
             list(
                 pool.map(
-                    lambda key: s3_probe_client.put_object(
-                        Bucket=bucket_name, Key=key, Body=b"x"
+                    lambda key: s3_conftest.retry_no_such_bucket(
+                        lambda: s3_probe_client.put_object(
+                            Bucket=bucket_name, Key=key, Body=b"x"
+                        )
                     ),
                     keys,
                 )
