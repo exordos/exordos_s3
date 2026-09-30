@@ -609,6 +609,25 @@ def wait_for_quota_check(operation, timeout=180, interval=SYNC_INTERVAL):
             time.sleep(interval)
 
 
+def retry_no_such_bucket(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
+    """Run an S3 operation on a new bucket, and return its result.
+
+    A bucket that has answered HEAD has been seen to refuse the next PUT
+    with NoSuchBucket. Retry that refusal, and only it, and log it so the
+    next occurrence can be traced.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return operation()
+        except botocore.exceptions.ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code != "NoSuchBucket" or time.monotonic() >= deadline:
+                raise
+            LOG.warning("Bucket served before is gone, retrying: %s", e)
+            time.sleep(interval)
+
+
 def make_s3_client(s3_endpoint, access_key, secret_key):
     return boto3.client(
         "s3",
