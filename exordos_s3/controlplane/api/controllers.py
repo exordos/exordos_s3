@@ -65,7 +65,7 @@ class S3InstanceController(
                     constants.ALL: field_p.Permissions.RO,
                     constants.CREATE: field_p.Permissions.RW,
                 },
-                "members": {constants.ALL: field_p.Permissions.RO},
+                "members": {constants.ALL: field_p.Permissions.HIDDEN},
                 "root_secret": {constants.ALL: field_p.Permissions.HIDDEN},
             },
         ),
