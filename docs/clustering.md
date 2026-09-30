@@ -74,9 +74,9 @@ both a hostname and a drive position in the erasure set. A node that
 disappears from the set, or a node the set gained that the membership does not
 know, puts the instance into `ERROR`: the nodes it still has keep serving, but
 a replacement node cannot take a free ordinal on its own. The instance stays in
-`ERROR` whatever the nodes report. `members` is read-only through the API, so
-there is no recovery in place: copy the data out through the nodes that still
-serve, then recreate the instance.
+`ERROR` whatever the nodes report. The membership is not exposed through the
+API, so there is no recovery in place: copy the data out through the nodes that
+still serve, then recreate the instance.
 
 ## One node applies the shared state
 

@@ -309,8 +309,8 @@ cluster over `nodes_number` nodes (4 to 16, one data disk each):
 - `kind`, `nodes_number` and `parity` are set on create only; `cpu` and `ram` of
   a distributed instance can't be changed either. `disk_size` can grow.
 - Every node serves the whole S3 API; `ipsv4` lists them in endpoint order.
-- IAM and bucket changes are applied by the first node (`members` ordinal 1)
-  and stall while that node is down; data keeps being served by the rest.
+- IAM and bucket changes are applied by the first node (the first address in
+  `ipsv4`) and stall while that node is down; data keeps being served by the rest.
 
 See [docs/clustering.md](docs/clustering.md) for how a cluster is laid out,
 what its status means and how it is operated.

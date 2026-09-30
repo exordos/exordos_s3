@@ -131,11 +131,8 @@ class TestDistributedInstance:
         assert distributed_instance["kind"] == "distributed"
         assert distributed_instance["nodes_number"] == NODES_NUMBER
         assert distributed_instance["parity"] == PARITY
-        assert len(distributed_instance["ipsv4"]) == NODES_NUMBER
-        ordinals = sorted(
-            m["ordinal"] for m in distributed_instance["members"].values()
-        )
-        assert ordinals == list(range(1, NODES_NUMBER + 1))
+        assert len(set(distributed_instance["ipsv4"])) == NODES_NUMBER
+        assert "members" not in distributed_instance
 
     def test_object_is_served_by_every_node(
         self,
