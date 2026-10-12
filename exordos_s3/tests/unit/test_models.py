@@ -14,7 +14,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from contextlib import nullcontext
 import typing as tp
+from unittest import mock
 import uuid as sys_uuid
 
 import pytest
@@ -112,6 +114,35 @@ class TestInstanceUpdate:
         instance.ram = 2048
 
         instance._validate_update()
+
+
+class TestBucketVersioning:
+    @pytest.mark.parametrize("enabled", [False, True])
+    @pytest.mark.parametrize("force", [False, True])
+    def test_object_lock_requires_versioning(self, force, enabled):
+        instance = _instance()
+        bucket = models.S3Bucket(
+            name="locked-bucket",
+            instance=instance,
+            project_id=instance.project_id,
+            object_lock_enabled=True,
+            versioning_enabled=True,
+        )
+        bucket.versioning_enabled = enabled
+        engine = mock.Mock()
+        engine.session_manager.return_value = nullcontext(mock.Mock())
+        with (
+            mock.patch.object(models.S3Bucket, "_get_engine", return_value=engine),
+            mock.patch.object(models.S3Bucket, "get_replication_targets", return_value=[]),
+            mock.patch.object(models.InstanceChildModel, "update") as update,
+        ):
+            if enabled:
+                bucket.update(force=force)
+                update.assert_called_once()
+            else:
+                with pytest.raises(models.S3ValidationError, match="object lock"):
+                    bucket.update(force=force)
+                update.assert_not_called()
 
 
 class TestBucketNameType:

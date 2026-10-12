@@ -67,6 +67,23 @@ resources:
     s3_version_read:
       name: "exordos_s3.s3_version.read"
 
+    replication_target_create:
+      name: "exordos_s3.replication_target.create"
+    replication_target_read:
+      name: "exordos_s3.replication_target.read"
+    replication_target_update:
+      name: "exordos_s3.replication_target.update"
+    replication_target_delete:
+      name: "exordos_s3.replication_target.delete"
+    replication_rule_create:
+      name: "exordos_s3.replication_rule.create"
+    replication_rule_read:
+      name: "exordos_s3.replication_rule.read"
+    replication_rule_update:
+      name: "exordos_s3.replication_rule.update"
+    replication_rule_delete:
+      name: "exordos_s3.replication_rule.delete"
+
   $core.iam.permissionbinding:
     s3_instance_create_binding:
       role: "726f6c65-0000-0000-0000-000000000002"
@@ -151,6 +168,39 @@ resources:
     s3_version_read_binding:
       role: "726f6c65-0000-0000-0000-000000000002"
       permission: $core.iam.permissions.$s3_version_read:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+
+    replication_target_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_target_create:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_target_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_target_read:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_target_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_target_update:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_target_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_target_delete:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_rule_create_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_rule_create:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_rule_read_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_rule_read:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_rule_update_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_rule_update:uuid
+      project_id: "4d657461-0000-0000-0000-000000000002"
+    replication_rule_delete_binding:
+      role: "726f6c65-0000-0000-0000-000000000002"
+      permission: $core.iam.permissions.$replication_rule_delete:uuid
       project_id: "4d657461-0000-0000-0000-000000000002"
 
   # s3 dataplane version catalog entry. Lives in the s3aas element namespace so

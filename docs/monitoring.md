@@ -69,6 +69,69 @@ max by (exordos_s3_instance) (rustfs_cluster_capacity_free_bytes)
 The data disk also holds `/var/log`, bind-mounted from the same file system,
 so the node's logs count against it.
 
+## Bucket replication
+
+RustFS 1.0.1 exports replication metrics through the same OTLP pipeline, without
+an additional exporter or scrape endpoint. They carry the instance/project
+labels, `bucket` and, for target-specific metrics, the native `target_arn`.
+The ARN is the RustFS remote target identifier, not the Exordos target UUID.
+
+| Metric suffix after `rustfs_bucket_replication_` | Meaning |
+|---|---|
+| `current_backlog_count`, `current_backlog_bytes` | In-memory admitted work by bucket |
+| `durable_mrf_backlog_count`, `durable_mrf_backlog_bytes` | Recovery work persisted in the MRF file by bucket |
+| `mrf_pending_count`, `mrf_pending_bytes` | Recovery entries waiting to be flushed to disk, across all targets of a bucket |
+| `durable_mrf_available` | Whether the durable backlog snapshot could be read: `1` available, `0` unavailable |
+| `target_last_min_failed_count` | Failures in the preceding 60 seconds, including retries |
+| `target_total_failed_count` | Failed-attempt counter since process start; use `increase()` over the selected period |
+| `target_sent_bytes`, `target_sent_count` | Successful transfer counters; use `rate()` for throughput |
+| `latency_ms` | Replication request duration, with `operation` and `range` labels |
+| `mrf_dropped_count`, `mrf_missed_count`, `mrf_flush_failures` | Historical recovery queue warnings since process start |
+
+Queues and transfer counters are local to the reporting RustFS process, so sum
+them across nodes while keeping `bucket` and, for transfer counters, `target_arn`.
+Check the worst node's durable snapshot availability with `min by (bucket)`.
+Do not add memory, disk
+and pending-flush queues together: they represent different stages and can
+overlap. Disk queue values are unknown when the snapshot is unavailable;
+the dashboard hides them until all reporting nodes have an available snapshot.
+
+Successful bytes per second, per bucket and target:
+
+```promql
+sum by (exordos_s3_instance, bucket, target_arn) (
+  rate(rustfs_bucket_replication_target_sent_bytes[5m])
+)
+```
+
+The default VictoriaMetrics OTLP ingestion preserves these metric names;
+`target_sent_bytes` has no added `_total` suffix. Custom OTLP naming
+transformations require adjusting the dashboard queries.
+
+For objects per second, use `rate(target_sent_count[5m])` with the same metric
+prefix and grouping. **Replication failures in selected period** uses
+`increase(target_total_failed_count[$__range])` over the Grafana time range,
+accounting for counter resets. Repeated failed attempts count as failures;
+successful recovery does not decrease the counter.
+
+**Replication error logs** shows up to 1000 recent replication errors and
+warnings from RustFS and the S3 agent of the selected instance. It uses the
+observability element's `victoria-logs` datasource; the base image's vlagent
+forwards the journals. The dashboard time picker controls the log window.
+RustFS lines include bucket, key, object version, target and failure reason;
+expanded lines also show the node and service. Empty results can mean either
+no logged errors or missing log ingestion.
+
+Zero queues do not prove source/destination convergence. Failed objects can
+remain in source metadata until the scanner retries them. Historical failures
+can remain visible after a successful retry; they are not the number of objects
+still missing. Request latency is not replication lag or RPO. Investigate
+sustained queues, recurring minute-window failures, unavailable durable
+snapshots and increases in MRF warnings; check the S3 agent and RustFS logs,
+object version replication status and a source/destination version comparison.
+No configured replication or missing telemetry can produce no data; the
+dashboard does not convert that into a healthy zero.
+
 ## Dashboard
 
 The `s3_dashboard` element puts an **S3 instance** dashboard into the **S3**
@@ -85,6 +148,10 @@ folder of the shared observability Grafana, per project and instance:
 - buckets: size, objects and quota fill of each bucket;
 - traffic and operations: requests by status and S3 operation, share of 5xx,
   mean latency, bytes sent;
+- replication: memory/disk queues and pending flushes, failures per target,
+  successful bytes/s and objects/s, failures over the selected period and
+  error logs, durable recovery snapshot availability, recovery
+  warnings and replication request latency;
 - process: RustFS memory against node RAM, restarts and OOM kills.
 
 The element depends on the `observability` element; install it after that one.

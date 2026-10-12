@@ -232,8 +232,8 @@ class TestQuotaEnforcement:
         )
 
         s3_conftest.wait_for_quota_check(
-            lambda: s3_probe_client.put_object(
-                Bucket=bucket_name, Key="small", Body=b"x" * 100
+            lambda: s3_conftest.upload_test_object(
+                s3_probe_client, bucket_name, "small", b"x" * 100
             )
         )
 
@@ -258,13 +258,21 @@ class TestQuotaEnforcement:
 
         # Small upload should succeed
         s3_conftest.wait_for_quota_check(
-            lambda: client.put_object(Bucket=bucket_name, Key="small", Body=b"x" * 100)
+            lambda: s3_conftest.upload_test_object(
+                client, bucket_name, "small", b"x" * 100
+            )
         )
 
-        # Large upload should fail
-        with pytest.raises(botocore.exceptions.ClientError) as exc_info:
-            client.put_object(Bucket=bucket_name, Key="big", Body=b"x" * 2048)
-        assert "Bucket quota exceeded" in exc_info.value.response["Error"]["Message"]
+        def upload_above_quota():
+            s3_conftest.wait_for_quota_check(
+                lambda: s3_conftest.upload_test_object(
+                    client, bucket_name, "big", b"x" * 2048
+                )
+            )
+            client.delete_object(Bucket=bucket_name, Key="big")
+
+        error = s3_conftest.wait_until_denied(upload_above_quota)
+        assert "Bucket quota exceeded" in error.response["Error"]["Message"]
 
 
 class TestObjectLockRetention:
@@ -325,24 +333,59 @@ class TestBucketROFields:
         with pytest.raises(bazooka_exc.BaseHTTPException):
             s3_api_client.update(collection, uuid=bucket["uuid"], name="new-name")
 
-    def test_versioning_enabled_read_only(
-        self, s3_api_client, s3_instance_uuid, s3_project_id
+
+class TestBucketVersioning:
+    """Versioning updates reach the S3 data plane."""
+
+    def test_object_lock_prevents_suspension(
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
     ):
-        bucket_name = f"test-rover-{uuid.uuid4().hex[:8]}"
+        bucket = s3_conftest.create_bucket_via_api(
+            s3_api_client,
+            s3_instance_uuid,
+            f"test-locked-versioning-{uuid.uuid4().hex[:8]}",
+            s3_project_id,
+            s3_probe_client,
+            versioning_enabled=True,
+            object_lock_enabled=True,
+        )
+        collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
+        with pytest.raises(bazooka_exc.BadRequestError):
+            s3_api_client.update(
+                collection, uuid=bucket["uuid"], versioning_enabled=False
+            )
+        assert s3_api_client.get(collection, uuid=bucket["uuid"])["versioning_enabled"]
+        versioning = s3_probe_client.get_bucket_versioning(Bucket=bucket["name"])
+        assert versioning.get("Status") == "Enabled"
+
+    def test_enable_and_suspend_versioning(
+        self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
+    ):
+        bucket_name = f"test-versioning-{uuid.uuid4().hex[:8]}"
         bucket = s3_conftest.create_bucket_via_api(
             s3_api_client,
             s3_instance_uuid,
             bucket_name,
             s3_project_id,
+            s3_probe_client,
             versioning_enabled=False,
         )
 
-        # Attempt to update versioning_enabled should fail or be ignored
         collection = f"{s3_conftest.S3_INSTANCES}{s3_instance_uuid}/buckets/"
-        with pytest.raises(bazooka_exc.BaseHTTPException):
-            s3_api_client.update(
-                collection, uuid=bucket["uuid"], versioning_enabled=True
+        for enabled, status in ((True, "Enabled"), (False, "Suspended")):
+            updated = s3_api_client.update(
+                collection, uuid=bucket["uuid"], versioning_enabled=enabled
             )
+            assert updated["versioning_enabled"] is enabled
+            deadline = time.monotonic() + s3_conftest.SYNC_TIMEOUT
+            while True:
+                actual = s3_conftest.retry_no_such_bucket(
+                    lambda: s3_probe_client.get_bucket_versioning(Bucket=bucket_name)
+                )
+                if actual.get("Status") == status or time.monotonic() >= deadline:
+                    break
+                time.sleep(s3_conftest.SYNC_INTERVAL)
+            assert actual.get("Status") == status
 
 
 class TestInstanceDiskSizeUpdate:
