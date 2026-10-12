@@ -40,8 +40,10 @@ from restalchemy.dm import properties
 from restalchemy.dm import types as ra_types
 
 from exordos_s3 import constants
+from exordos_s3.dataplane import replication
 
 LOG = logging.getLogger(__name__)
+
 
 # Built-in policies shipped by RustFS.  They are not instance state and the
 # server refuses to delete them, so they are filtered out of the actual state.
@@ -582,6 +584,8 @@ class S3Instance(meta.MetaDataPlaneModel):
         ra_types.Enum([s.value for s in pc.InstanceStatus]),
         default=pc.InstanceStatus.ACTIVE.value,
     )
+    replication = properties.property(ra_types.Dict(), default=dict)
+    replication_credentials = properties.property(ra_types.Dict(), default=dict)
     # False on every node of a distributed instance but one: they all see the
     # same RustFS state, and a node holding a stale target would delete what
     # another one has just created.
@@ -591,7 +595,7 @@ class S3Instance(meta.MetaDataPlaneModel):
     ready = properties.property(ra_types.Boolean(), default=False)
 
     # The flag is not on the data plane, so it has to survive in the meta file
-    _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name", "reconciler"}
+    _meta_fields: tp.ClassVar[set[str]] = {"uuid", "name", "reconciler", "replication"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -599,6 +603,27 @@ class S3Instance(meta.MetaDataPlaneModel):
 
     def get_meta_model_fields(self) -> set[str] | None:
         return self._meta_fields
+
+    @classmethod
+    def from_ua_resource(cls, resource):
+        model = super().from_ua_resource(resource)
+        model.target_fields = [
+            field for field in model.target_fields if field != "replication_credentials"
+        ]
+        return model
+
+    def get_resource_ignore_fields(self):
+        return super().get_resource_ignore_fields() + ["replication_credentials"]
+
+    def _replication_manager(self):
+        return replication.ReplicationManager(
+            self.mc, os.path.join(c.WORK_DIR, "s3_replication.json")
+        )
+
+    def _replication_error(self):
+        self.replication = {"error": True}
+        if "replication" not in self.target_fields:
+            self.target_fields = [*self.target_fields, "replication"]
 
     # -- Reconciliation: policies --
 
@@ -810,7 +835,26 @@ class S3Instance(meta.MetaDataPlaneModel):
 
         self._reconcile_policies(actual_policies)
         self._reconcile_users(actual_users)
+        manager = self._replication_manager()
+        cleanup = {
+            binding["bucket"]
+            for binding in manager.bindings.values()
+            if not self.replication.get(binding["bucket"])
+        }
+        # RustFS refuses versioning suspension while replication is configured.
+        if cleanup and not manager.apply(
+            self.replication,
+            self.replication_credentials,
+            actual_buckets,
+            buckets=cleanup,
+        ):
+            self._replication_error()
+            return
         self._reconcile_buckets(actual_buckets)
+        if (self.replication or manager.bindings) and not manager.apply(
+            self.replication, self.replication_credentials, self.mc.list_buckets()
+        ):
+            self._replication_error()
 
     def _fill_ready(self) -> None:
         try:
@@ -857,6 +901,11 @@ class S3Instance(meta.MetaDataPlaneModel):
         self._fill_actual_policies()
         self._fill_actual_users()
         self._fill_actual_buckets()
+        if self.reconciler and (
+            self.replication.get("error")
+            or not self._replication_manager().matches(self.replication)
+        ):
+            self._replication_error()
 
     def delete_from_dp(self) -> None:
         # Instance exists along with the VM — nothing to delete

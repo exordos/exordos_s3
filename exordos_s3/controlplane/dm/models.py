@@ -15,10 +15,14 @@
 #    under the License.
 
 import enum
+import hashlib
+import ipaddress
+import json
 import re
 import secrets
 import string
 import typing as tp
+from urllib.parse import urlsplit
 
 from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.common import exceptions as ra_exc
@@ -30,6 +34,14 @@ from restalchemy.dm import types
 from restalchemy.storage.sql import orm
 
 from exordos_s3 import utils as u
+
+
+def _lock_bucket(session, bucket):
+    return session.execute(
+        "SELECT uuid, versioning_enabled FROM s3_buckets WHERE uuid = %s FOR UPDATE",
+        (str(bucket.uuid),),
+    ).fetchone()
+
 
 # Lengths and alphabets for S3 credential generation
 ACCESS_KEY_LENGTH = 20
@@ -246,7 +258,7 @@ class InstanceChildModel(
 
     def touch_parent(self, session=None):
         # Enforce dataplane updates via parent model
-        self.instance.update(force=True)
+        self.instance.update(session=session, force=True)
 
     def insert(self, session=None):
         super().insert(session=session)
@@ -270,9 +282,7 @@ class S3Bucket(InstanceChildModel):
         types.Enum([status.value for status in S3Status]),
         default=S3Status.ACTIVE.value,
     )
-    versioning_enabled = properties.property(
-        types.Boolean(), default=False, read_only=True
-    )
+    versioning_enabled = properties.property(types.Boolean(), default=False)
     quota_bytes = properties.property(
         types.Integer(min_value=0, max_value=2**63 - 1), default=0
     )
@@ -288,6 +298,257 @@ class S3Bucket(InstanceChildModel):
         types.AllowNone(types.Integer(min_value=1, max_value=365000)),
         default=None,
     )
+
+    def get_replication_targets(self, session=None):
+        return S3ReplicationTarget.objects.get_all(
+            session=session, filters={"bucket": dm_filters.EQ(self)}
+        )
+
+    def update(self, session=None, force=False):
+        with self._get_engine().session_manager(session=session) as session:
+            _lock_bucket(session, self)
+            if self.object_lock_enabled and not self.versioning_enabled:
+                raise S3ValidationError(details="versioning is required by object lock")
+            if not self.versioning_enabled and self.get_replication_targets(session):
+                raise S3ValidationError(
+                    details="versioning is required by replication targets"
+                )
+            super().update(session=session, force=force)
+
+    def delete(self, session=None, **kwargs):
+        for target in self.get_replication_targets(session):
+            u.remove_nested_dm(S3ReplicationRule, "target", target, session=session)
+            target.delete(session=session)
+        return super().delete(session=session, **kwargs)
+
+
+class BucketChildModel(
+    models.ModelWithUUID,
+    models.ModelWithNameDesc,
+    models.ModelWithTimestamp,
+    models.ModelWithProject,
+    ua_models.TargetResourceMixin,
+    orm.SQLStorableMixin,
+):
+    bucket = relationships.relationship(S3Bucket, required=True, read_only=True)
+
+    def _validate(self, session=None):
+        if (
+            self.project_id != self.bucket.project_id
+            or self.bucket.project_id != self.bucket.instance.project_id
+        ):
+            raise S3ValidationError(details="bucket must belong to the same project")
+
+    def insert(self, session=None):
+        with self._get_engine().session_manager(session=session) as session:
+            current_bucket = _lock_bucket(session, self.bucket)
+            if not current_bucket or not current_bucket["versioning_enabled"]:
+                raise S3ValidationError(
+                    details="source bucket versioning must be enabled"
+                )
+            self._validate(session)
+            super().insert(session=session)
+            self.bucket.touch_parent(session=session)
+
+    def update(self, session=None, force=False):
+        with self._get_engine().session_manager(session=session) as session:
+            current_bucket = _lock_bucket(session, self.bucket)
+            if not current_bucket or not current_bucket["versioning_enabled"]:
+                raise S3ValidationError(
+                    details="source bucket versioning must be enabled"
+                )
+            self._validate(session)
+            super().update(session=session, force=force)
+            self.bucket.touch_parent(session=session)
+
+    def delete(self, session=None, **kwargs):
+        result = super().delete(session=session, **kwargs)
+        self.bucket.touch_parent(session=session)
+        return result
+
+
+class S3ReplicationTarget(BucketChildModel):
+    __tablename__ = "s3_replication_targets"
+
+    endpoint = properties.property(
+        types.String(min_length=1, max_length=2048), required=True
+    )
+    destination_bucket = properties.property(BucketNameType(), required=True)
+    region = properties.property(
+        types.String(min_length=1, max_length=255), default="us-east-1"
+    )
+    access_key = properties.property(
+        types.String(min_length=1, max_length=256), required=True
+    )
+    secret_key = properties.property(
+        types.String(min_length=1, max_length=4096), required=True
+    )
+    session_token = properties.property(types.String(max_length=16384), default="")
+    ca_cert_pem = properties.property(types.String(max_length=65536), default="")
+    bucket_lookup = properties.property(
+        types.Enum(["auto", "path", "dns"]), default="auto"
+    )
+    storage_class = properties.property(
+        types.String(max_length=255), default="STANDARD"
+    )
+    bandwidth_limit = properties.property(
+        types.Integer(min_value=0, max_value=2**63 - 1), default=0
+    )
+    synchronous = properties.property(types.Boolean(), default=False)
+    disable_proxy = properties.property(types.Boolean(), default=True)
+
+    def get_rules(self, session=None):
+        return S3ReplicationRule.objects.get_all(
+            session=session, filters={"target": dm_filters.EQ(self)}
+        )
+
+    def _validate(self, session=None):
+        super()._validate(session)
+        if not self.bucket.versioning_enabled:
+            raise S3ValidationError(
+                details="enable source bucket versioning before adding a target"
+            )
+        try:
+            url = urlsplit(self.endpoint)
+            port = url.port
+            if (
+                port == 0
+                or url.scheme not in ("http", "https")
+                or not url.hostname
+                or url.username is not None
+                or url.password is not None
+                or url.path not in ("", "/")
+                or url.query
+                or url.fragment
+                or any(c.isspace() for c in self.endpoint)
+            ):
+                raise ValueError
+            host = url.hostname.encode("idna").decode("ascii").lower().rstrip(".")
+            if not host or "\\" in host or "%" in host:
+                raise ValueError
+            if self.ca_cert_pem and url.scheme != "https":
+                raise ValueError
+            if host == "localhost" or host.endswith(".localhost"):
+                raise ValueError
+            try:
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                address = None
+            if address and (
+                address.is_loopback
+                or address.is_link_local
+                or address.is_multicast
+                or address.is_unspecified
+            ):
+                raise ValueError
+            authority = f"[{host}]" if ":" in host else host
+            if port is not None and port != (443 if url.scheme == "https" else 80):
+                authority += f":{port}"
+            self.endpoint = f"{url.scheme}://{authority}"
+        except ValueError:
+            raise S3ValidationError(
+                details="endpoint must be an HTTP(S) origin without credentials or a path"
+            ) from None
+        for other in self.bucket.get_replication_targets(session):
+            if (
+                other.uuid != self.uuid
+                and urlsplit(other.endpoint).netloc == urlsplit(self.endpoint).netloc
+            ):
+                raise S3ValidationError(
+                    details="RustFS allows one replication target per endpoint in a bucket"
+                )
+
+    def update(self, session=None, force=False):
+        for field in ("endpoint", "destination_bucket", "region", "storage_class"):
+            if self.properties[field].is_dirty():
+                raise S3ValidationError(
+                    details=f"{field} can't be changed; create another target"
+                )
+        super().update(session=session, force=force)
+
+    def delete(self, session=None, **kwargs):
+        if self.get_rules(session):
+            raise S3ValidationError(
+                details="remove replication rules before deleting their target"
+            )
+        return super().delete(session=session, **kwargs)
+
+    def credential_revision(self):
+        value = [self.access_key, self.secret_key, self.session_token]
+        return hashlib.sha256(json.dumps(value).encode()).hexdigest()
+
+
+class S3ReplicationRule(
+    models.ModelWithUUID,
+    models.ModelWithNameDesc,
+    models.ModelWithTimestamp,
+    models.ModelWithProject,
+    ua_models.TargetResourceMixin,
+    orm.SQLStorableMixin,
+):
+    __tablename__ = "s3_replication_rules"
+
+    target = relationships.relationship(
+        S3ReplicationTarget, required=True, read_only=True
+    )
+    enabled = properties.property(types.Boolean(), default=True)
+    priority = properties.property(
+        types.Integer(min_value=1, max_value=2**31 - 1), default=1
+    )
+    prefix = properties.property(types.String(max_length=1024), default="")
+    tags = properties.property(
+        types.TypedDict(types.String(max_length=256)), default=dict
+    )
+    replicate_existing = properties.property(types.Boolean(), default=True)
+    replicate_delete_markers = properties.property(types.Boolean(), default=True)
+    replicate_deletes = properties.property(types.Boolean(), default=False)
+
+    def _validate(self, session=None):
+        if self.project_id != self.target.project_id:
+            raise S3ValidationError(details="target must belong to the same project")
+        if any(
+            not isinstance(key, str) or not key or len(key) > 128 for key in self.tags
+        ):
+            raise S3ValidationError(details="tag keys must contain 1 to 128 characters")
+        if self.tags and self.replicate_delete_markers:
+            raise S3ValidationError(
+                details="tag filters cannot replicate delete markers; "
+                "set replicate_delete_markers=false"
+            )
+        rules = [
+            rule
+            for target in self.target.bucket.get_replication_targets(session)
+            for rule in target.get_rules(session)
+        ]
+        if any(
+            rule.uuid != self.uuid and rule.priority == self.priority for rule in rules
+        ):
+            raise S3ValidationError(
+                details="rule priority must be unique within the source bucket"
+            )
+        if len([rule for rule in rules if rule.uuid != self.uuid]) >= 1000:
+            raise S3ValidationError(
+                details="a bucket supports at most 1000 replication rules"
+            )
+
+    def insert(self, session=None):
+        with self._get_engine().session_manager(session=session) as session:
+            _lock_bucket(session, self.target.bucket)
+            self._validate(session)
+            super().insert(session=session)
+            self.target.bucket.touch_parent(session=session)
+
+    def update(self, session=None, force=False):
+        with self._get_engine().session_manager(session=session) as session:
+            _lock_bucket(session, self.target.bucket)
+            self._validate(session)
+            super().update(session=session, force=force)
+            self.target.bucket.touch_parent(session=session)
+
+    def delete(self, session=None, **kwargs):
+        result = super().delete(session=session, **kwargs)
+        self.target.bucket.touch_parent(session=session)
+        return result
 
 
 class S3Policy(InstanceChildModel):

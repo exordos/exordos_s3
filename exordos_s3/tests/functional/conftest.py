@@ -476,7 +476,9 @@ def upload_test_object(s3_client, bucket, key, content=None) -> str:
         content = f"test-content-{time.time()}"
     if isinstance(content, str):
         content = content.encode()
-    s3_client.put_object(Bucket=bucket, Key=key, Body=content)
+    retry_no_such_bucket(
+        lambda: s3_client.put_object(Bucket=bucket, Key=key, Body=content)
+    )
     return key
 
 

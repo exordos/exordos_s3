@@ -40,6 +40,8 @@ class S3InstanceNode(
     users = properties.property(ra_types.Dict())
     policies = properties.property(ra_types.Dict())
     access_keys = properties.property(ra_types.Dict())
+    replication = properties.property(ra_types.Dict(), default=dict)
+    replication_credentials = properties.property(ra_types.Dict(), default=dict)
     # Nodes of a distributed instance share one IAM and bucket state, and
     # only one of them applies the target to it.
     reconciler = properties.property(ra_types.Boolean(), default=True)
@@ -51,6 +53,17 @@ class S3InstanceNode(
     def get_resource_kind(cls) -> str:
         """Return the resource kind."""
         return "s3_instance_node"
+
+    def to_ua_resource(self, *args, **kwargs):
+        resource = super().to_ua_resource(*args, **kwargs)
+        if self.replication_credentials:
+            # Credentials travel to the agent, while their revision participates
+            # in the target hash and their values stay out of actual reports.
+            resource.value = {
+                **resource.value,
+                "replication_credentials": self.replication_credentials,
+            }
+        return resource
 
     def get_resource_target_fields(self) -> tp.Collection[str]:
         """Return the collection of target fields.
@@ -65,6 +78,8 @@ class S3InstanceNode(
             "policies",
             "access_keys",
         }
+        if self.replication:
+            fields.add("replication")
         # Only the other nodes of a distributed instance carry the flag, so
         # single node targets keep their hash and agents built before the
         # field existed never receive it.

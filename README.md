@@ -138,6 +138,12 @@ print(obj["Body"].read())  # b'hello'
 | GET | `/v1/types/s3/instances/{id}/buckets` | List buckets |
 | DELETE | `/v1/types/s3/instances/{id}/buckets/{name}` | Delete bucket |
 
+### Bucket replication
+
+Targets and rules configure multiple destinations, prefix/tag filters, bandwidth,
+credentials and deletion propagation. See [the replication API](docs/replication.md)
+and [its Russian version](docs/replication.ru.md).
+
 ### Users
 
 | Method | Endpoint | Description |

@@ -1,5 +1,5 @@
 name: "s3_dashboard"
-description: "Grafana dashboard of S3 instances (capacity, health, traffic) on the shared observability Grafana instance."
+description: "Grafana dashboard of S3 instances (capacity, health, traffic, replication) on the shared observability Grafana instance."
 schema_version: 1
 version: "{{ version }}"
 api_version: "v1"
@@ -16,7 +16,9 @@ resources:
 
   # The panels read node_exporter series (the instance is in the node host
   # name) and the RustFS series labelled exordos_s3_instance/exordos_project
-  # by the control plane, see docs/monitoring.md. A legend that needs
+  # by the control plane, see docs/monitoring.md. Logs use the observability
+  # VictoriaLogs datasource by name; Grafana resolves it when no uid matches.
+  # A legend that needs
   # Grafana's double-brace syntax is written as a Jinja string literal.
   $grafanaaas.types.grafana.dashboards:
     s3:
@@ -27,7 +29,7 @@ resources:
         content:
           title: S3 instance
           uid: exordos-s3-instance
-          description: Capacity, health and traffic of one S3 instance (s3aas).
+          description: Capacity, health, traffic and replication of one S3 instance (s3aas).
           schemaVersion: 41
           version: 1
           refresh: 1m
@@ -871,6 +873,242 @@ resources:
                 min: 0
               overrides: []
             description: RustFS restarts per node over the last hour, and processes the kernel killed for lack of memory.
+          - id: 37
+            type: row
+            title: Replication
+            collapsed: false
+            gridPos:
+              h: 1
+              w: 24
+              x: 0
+              y: 80
+            panels: []
+          - id: 38
+            type: timeseries
+            title: Queued replication operations
+            gridPos:
+              h: 8
+              w: 12
+              x: 0
+              y: 81
+            targets:
+            - refId: A
+              expr: sum by (bucket) (rustfs_bucket_replication_current_backlog_count{exordos_s3_instance="$s3"})
+              legendFormat: "memory {{ '{{bucket}}' }}"
+            - refId: B
+              expr: sum by (bucket) (rustfs_bucket_replication_durable_mrf_backlog_count{exordos_s3_instance="$s3"}) and on (bucket) (min by (bucket) (rustfs_bucket_replication_durable_mrf_available{exordos_s3_instance="$s3"}) == 1)
+              legendFormat: "disk {{ '{{bucket}}' }}"
+            - refId: C
+              expr: sum by (bucket) (rustfs_bucket_replication_mrf_pending_count{exordos_s3_instance="$s3"})
+              legendFormat: "waiting for disk {{ '{{bucket}}' }} (all targets)"
+            fieldConfig:
+              defaults:
+                unit: short
+                min: 0
+              overrides: []
+            description: Node-local queues summed across nodes, separately for memory, durable recovery files and entries waiting to be flushed. Do not add these series together. Zero queues do not prove replication has caught up; failed objects can wait for the scanner outside these queues.
+          - id: 39
+            type: timeseries
+            title: Queued replication bytes
+            gridPos:
+              h: 8
+              w: 12
+              x: 12
+              y: 81
+            targets:
+            - refId: A
+              expr: sum by (bucket) (rustfs_bucket_replication_current_backlog_bytes{exordos_s3_instance="$s3"})
+              legendFormat: "memory {{ '{{bucket}}' }}"
+            - refId: B
+              expr: sum by (bucket) (rustfs_bucket_replication_durable_mrf_backlog_bytes{exordos_s3_instance="$s3"}) and on (bucket) (min by (bucket) (rustfs_bucket_replication_durable_mrf_available{exordos_s3_instance="$s3"}) == 1)
+              legendFormat: "disk {{ '{{bucket}}' }}"
+            - refId: C
+              expr: sum by (bucket) (rustfs_bucket_replication_mrf_pending_bytes{exordos_s3_instance="$s3"})
+              legendFormat: "waiting for disk {{ '{{bucket}}' }} (all targets)"
+            fieldConfig:
+              defaults:
+                unit: bytes
+                min: 0
+              overrides: []
+            description: Bytes represented in each queue. Disk queue values are unknown when the durable recovery snapshot is unavailable; check Durable recovery snapshot. These are admitted work queues, not a measurement of the full source/destination difference.
+          - id: 40
+            type: timeseries
+            title: Replication failures in the last minute
+            gridPos:
+              h: 8
+              w: 12
+              x: 0
+              y: 89
+            targets:
+            - refId: A
+              expr: sum by (bucket, target_arn) (rustfs_bucket_replication_target_last_min_failed_count{exordos_s3_instance="$s3"})
+              legendFormat: "{{ '{{bucket}}' }} → {{ '{{target_arn}}' }}"
+            fieldConfig:
+              defaults:
+                unit: short
+                min: 0
+              overrides: []
+            description: Failure events in the preceding 60 seconds, including retries. Objects can have succeeded afterwards. This gauge is not the current number of missing objects; do not use rate() on it.
+          - id: 41
+            type: timeseries
+            title: Successful replication traffic
+            gridPos:
+              h: 8
+              w: 12
+              x: 12
+              y: 89
+            targets:
+            - refId: A
+              expr: sum by (bucket, target_arn) (rate(rustfs_bucket_replication_target_sent_bytes{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: "{{ '{{bucket}}' }} → {{ '{{target_arn}}' }}"
+            fieldConfig:
+              defaults:
+                unit: Bps
+                min: 0
+              overrides: []
+            description: Successfully replicated bytes per second, from per-target counters. Each target is separate; multiple replicas are not distinct source bytes. Counters reset when RustFS restarts.
+          - id: 42
+            type: stat
+            title: Durable recovery snapshot
+            gridPos:
+              h: 8
+              w: 6
+              x: 0
+              y: 97
+            targets:
+            - refId: A
+              expr: min by (bucket) (rustfs_bucket_replication_durable_mrf_available{exordos_s3_instance="$s3"})
+              legendFormat: "{{ '{{bucket}}' }}"
+              instant: true
+            fieldConfig:
+              defaults:
+                noValue: Unknown
+                mappings:
+                - type: value
+                  options:
+                    '0':
+                      text: Unavailable
+                    '1':
+                      text: Available
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: red
+                    value: null
+                  - color: green
+                    value: 1
+              overrides: []
+            options:
+              colorMode: background
+              graphMode: none
+            description: Worst node's availability of the durable MRF backlog snapshot for each bucket. Available means the snapshot could be read, not that every source object is replicated. Missing telemetry is unknown, not a zero backlog.
+          - id: 43
+            type: timeseries
+            title: Recovery queue warnings since restart
+            gridPos:
+              h: 8
+              w: 6
+              x: 6
+              y: 97
+            targets:
+            - refId: A
+              expr: sum by (bucket) (rustfs_bucket_replication_mrf_dropped_count{exordos_s3_instance="$s3"})
+              legendFormat: "dropped {{ '{{bucket}}' }}"
+            - refId: B
+              expr: sum by (bucket) (rustfs_bucket_replication_mrf_missed_count{exordos_s3_instance="$s3"})
+              legendFormat: "missed {{ '{{bucket}}' }}"
+            - refId: C
+              expr: sum by (bucket) (rustfs_bucket_replication_mrf_flush_failures{exordos_s3_instance="$s3"})
+              legendFormat: "flush failures {{ '{{bucket}}' }}"
+            fieldConfig:
+              defaults:
+                unit: short
+                min: 0
+              overrides: []
+            description: Historical recovery queue losses and flush failures on the reporting processes. Counts reset on restart and do not represent the current source/destination difference. Investigate increases and check the S3 agent and RustFS logs.
+          - id: 44
+            type: timeseries
+            title: Replication request latency
+            gridPos:
+              h: 8
+              w: 12
+              x: 12
+              y: 97
+            targets:
+            - refId: A
+              expr: max by (bucket, target_arn) (rustfs_bucket_replication_latency_ms{exordos_s3_instance="$s3",operation="object_replication",range="all"})
+              legendFormat: "{{ '{{bucket}}' }} → {{ '{{target_arn}}' }}"
+            fieldConfig:
+              defaults:
+                unit: ms
+                min: 0
+              overrides: []
+            description: Maximum reported request-duration gauge across nodes for a bucket and target. This is transfer/request latency, not end-to-end replication lag, oldest pending object age or RPO.
+          - id: 45
+            type: timeseries
+            title: Successfully replicated objects
+            gridPos:
+              h: 8
+              w: 12
+              x: 0
+              y: 105
+            targets:
+            - refId: A
+              expr: sum by (bucket, target_arn) (rate(rustfs_bucket_replication_target_sent_count{exordos_s3_instance="$s3"}[5m]))
+              legendFormat: "{{ '{{bucket}}' }} → {{ '{{target_arn}}' }}"
+            fieldConfig:
+              defaults:
+                unit: ops
+                min: 0
+              overrides: []
+            description: Successful object transfers per second, averaged over five minutes, separately for each bucket and target. Versions, retries that eventually succeed and transfers to multiple targets are not distinct source objects. Counters reset when RustFS restarts.
+          - id: 46
+            type: stat
+            title: Replication failures in selected period
+            gridPos:
+              h: 8
+              w: 12
+              x: 12
+              y: 105
+            targets:
+            - refId: A
+              expr: sum by (bucket, target_arn) (increase(rustfs_bucket_replication_target_total_failed_count{exordos_s3_instance="$s3"}[$__range]))
+              legendFormat: "{{ '{{bucket}}' }} → {{ '{{target_arn}}' }}"
+              instant: true
+            fieldConfig:
+              defaults:
+                unit: short
+                decimals: 0
+                min: 0
+              overrides: []
+            options:
+              colorMode: none
+              graphMode: none
+              textMode: value_and_name
+            description: Increase in the failure counter over the dashboard's selected time range, accounting for process restarts. Includes repeated failed attempts and objects that later succeeded; this is not the current number of missing objects. The estimate depends on metric sampling.
+          - id: 47
+            type: logs
+            title: Replication error logs
+            datasource:
+              type: victoriametrics-logs-datasource
+              uid: victoria-logs
+            gridPos:
+              h: 14
+              w: 24
+              x: 0
+              y: 113
+            targets:
+            - refId: A
+              expr: '_HOSTNAME:~"^s3aas-dp-$s3-node-" _SYSTEMD_UNIT:in("exordos-metapaas-rustfs.service", "exordos-metapaas-s3-agent.service") _msg:~"(?i)replicat" _msg:~"(?i)(error|fail|warn|cannot)"'
+              queryType: instant
+              maxLines: 1000
+            options:
+              showTime: true
+              wrapLogMessage: true
+              sortOrder: Descending
+              enableLogDetails: true
+              dedupStrategy: none
+            description: Replication errors and warnings from RustFS and the S3 agent on nodes of the selected instance, via journald and VictoriaLogs. Shows up to 1000 recent matching lines within the dashboard's time range. Expand a line for node and service details; RustFS object failures include bucket, object, version, target and error. No matching lines can mean either no logged errors or missing log ingestion.
 
   $s3_dashboard.imports.$grafana_instance.dashboards:
     s3_binding:
