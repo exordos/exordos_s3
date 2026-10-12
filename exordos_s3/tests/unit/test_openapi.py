@@ -14,6 +14,7 @@
 
 """Verify the offline API specification and element artifact contract."""
 
+import os
 from pathlib import Path
 import sys
 from unittest import mock
@@ -91,5 +92,7 @@ def test_s3aas_build_generates_spec_before_packaging() -> None:
         for item in element["artifacts"]
         if item.get("script") == "images/build_openapi_spec.sh"
     )
-    assert (root / "exordos" / artifact["script"]).is_file()
+    script = root / "exordos" / artifact["script"]
+    assert script.is_file()
+    assert os.access(script, os.X_OK)
     assert artifact["artifacts"] == ["../docs/openapi/openapi_user.yaml"]
