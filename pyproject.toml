@@ -17,6 +17,9 @@ dependencies = [
     "requests>=2.28.0,<3.0.0",
 ]
 
+[project.scripts]
+exordos-s3-openapi-spec = "exordos_s3.openapi_spec:main"
+
 [project.entry-points."exordos_metapaas_paas"]
 s3 = "exordos_s3.definition:S3Definition"
 
