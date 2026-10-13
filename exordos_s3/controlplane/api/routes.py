@@ -36,8 +36,18 @@ class S3UserRoute(routes.Route):
     policies = routes.route(S3UserPolicyAttachmentRoute, resource_route=True)
 
 
+class S3ReplicationRuleRoute(routes.Route):
+    __controller__ = controllers.S3ReplicationRuleController
+
+
+class S3ReplicationTargetRoute(routes.Route):
+    __controller__ = controllers.S3ReplicationTargetController
+    rules = routes.route(S3ReplicationRuleRoute, resource_route=True)
+
+
 class S3BucketRoute(routes.Route):
     __controller__ = controllers.S3BucketController
+    replication_targets = routes.route(S3ReplicationTargetRoute, resource_route=True)
 
 
 class S3PolicyRoute(routes.Route):

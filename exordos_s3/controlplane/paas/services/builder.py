@@ -74,6 +74,51 @@ class S3InstanceBuilder(PaaSBuilder):
             for b in instance.get_buckets()
         }
 
+    def _get_replication(self, instance):
+        config, credentials = {}, {}
+        for bucket in instance.get_buckets():
+            targets = {}
+            for target in bucket.get_replication_targets():
+                key = str(target.uuid)
+                targets[key] = {
+                    field: getattr(target, field)
+                    for field in (
+                        "endpoint",
+                        "destination_bucket",
+                        "region",
+                        "access_key",
+                        "ca_cert_pem",
+                        "bucket_lookup",
+                        "storage_class",
+                        "bandwidth_limit",
+                        "synchronous",
+                        "disable_proxy",
+                    )
+                }
+                targets[key]["credential_revision"] = target.credential_revision()
+                targets[key]["rules"] = {
+                    str(rule.uuid): {
+                        field: getattr(rule, field)
+                        for field in (
+                            "enabled",
+                            "priority",
+                            "prefix",
+                            "tags",
+                            "replicate_existing",
+                            "replicate_delete_markers",
+                            "replicate_deletes",
+                        )
+                    }
+                    for rule in target.get_rules()
+                }
+                credentials[key] = {
+                    "secret_key": target.secret_key,
+                    "session_token": target.session_token,
+                }
+            if targets:
+                config[bucket.name] = targets
+        return config, credentials
+
     def _get_policies(self, instance):
         return {
             str(p.uuid): {
@@ -149,6 +194,7 @@ class S3InstanceBuilder(PaaSBuilder):
         policies = self._get_policies(instance)
         users = self._get_users(instance)
         access_keys = self._get_access_keys(instance)
+        replication, replication_credentials = self._get_replication(instance)
 
         if instance.is_distributed():
             # Members are frozen by the infra builder once every node has an
@@ -165,6 +211,12 @@ class S3InstanceBuilder(PaaSBuilder):
                     users=users,
                     policies=policies,
                     access_keys=access_keys,
+                    replication=replication,
+                    replication_credentials=(
+                        replication_credentials
+                        if member["ordinal"] == RECONCILER_ORDINAL
+                        else {}
+                    ),
                     reconciler=member["ordinal"] == RECONCILER_ORDINAL,
                 )
                 for node_uuid, member in members
@@ -193,6 +245,8 @@ class S3InstanceBuilder(PaaSBuilder):
                     users=users,
                     policies=policies,
                     access_keys=access_keys,
+                    replication=replication,
+                    replication_credentials=replication_credentials,
                 )
             )
 

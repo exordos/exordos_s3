@@ -92,10 +92,6 @@ class S3BucketController(
                     constants.ALL: field_p.Permissions.RO,
                     constants.CREATE: field_p.Permissions.RW,
                 },
-                "versioning_enabled": {
-                    constants.ALL: field_p.Permissions.RO,
-                    constants.CREATE: field_p.Permissions.RW,
-                },
                 "object_lock_enabled": {
                     constants.ALL: field_p.Permissions.RO,
                     constants.CREATE: field_p.Permissions.RW,
@@ -194,4 +190,57 @@ class S3UserPolicyAttachmentController(
                 "status": {constants.ALL: field_p.Permissions.RO},
             },
         ),
+    )
+
+
+class S3ReplicationTargetController(
+    iam_controllers.NestedPolicyBasedController,
+    ra_controllers.BaseNestedResourceControllerPaginated,
+):
+    __policy_service_name__ = "exordos_s3"
+    __policy_name__ = "replication_target"
+    __pr_name__ = "bucket"
+    __resource__ = ra_resources.ResourceByRAModel(
+        model_class=models.S3ReplicationTarget,
+        convert_underscore=False,
+        process_filters=True,
+        fields_permissions=field_p.FieldsPermissions(
+            default=field_p.Permissions.RW,
+            fields={
+                **{
+                    field: {
+                        constants.ALL: field_p.Permissions.RO,
+                        constants.CREATE: field_p.Permissions.RW,
+                    }
+                    for field in (
+                        "endpoint",
+                        "destination_bucket",
+                        "region",
+                        "storage_class",
+                    )
+                },
+                **{
+                    field: {
+                        constants.ALL: field_p.Permissions.HIDDEN,
+                        constants.CREATE: field_p.Permissions.RW,
+                        constants.UPDATE: field_p.Permissions.RW,
+                    }
+                    for field in ("access_key", "secret_key", "session_token")
+                },
+            },
+        ),
+    )
+
+
+class S3ReplicationRuleController(
+    iam_controllers.NestedPolicyBasedController,
+    ra_controllers.BaseNestedResourceControllerPaginated,
+):
+    __policy_service_name__ = "exordos_s3"
+    __policy_name__ = "replication_rule"
+    __pr_name__ = "target"
+    __resource__ = ra_resources.ResourceByRAModel(
+        model_class=models.S3ReplicationRule,
+        convert_underscore=False,
+        process_filters=True,
     )
