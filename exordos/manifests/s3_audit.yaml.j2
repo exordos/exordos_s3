@@ -1,0 +1,92 @@
+# Copyright 2026 Genesis Corporation.
+# Licensed under the Apache License, Version 2.0 (the "License");
+
+name: "s3_audit"
+description: "Optional Audit delivery for S3"
+schema_version: 1
+version: "{{ version }}"
+api_version: "v1"
+
+requirements:
+  s3aas:
+    from_version: "0.0.0"
+  metapaas:
+    from_version: "0.0.0"
+  audit:
+    from_version: "0.0.0"
+  core:
+    from_version: "0.0.0"
+
+imports:
+  metapaas_project:
+    element: "$metapaas"
+    kind: "resource"
+    link: "$core.iam.projects.$metapaas_project"
+  metapaas_cp:
+    element: "$metapaas"
+    kind: "resource"
+    link: "$core.compute.nodes.$metapaas_cp"
+  audit_events_create:
+    element: "$audit"
+    kind: "resource"
+    link: "$core.iam.permissions.$events_create"
+  var_iam_default_client_uuid:
+    element: "$core"
+    kind: "resource"
+    link: "$core.vs.variables.$iam_default_client_uuid"
+
+resources:
+
+  $core.iam.users:
+    s3_audit_user:
+      username: s3_audit
+      email: "noreply+s3-audit@exordos.com"
+      type: service
+      password: "unused-by-a-service-account"
+
+  $core.iam.roles:
+    s3_audit:
+      name: s3_audit
+      description: "S3 audit event delivery"
+
+  $core.iam.permissionbinding:
+    s3_audit_events_create_binding:
+      role: $core.iam.roles.$s3_audit:uuid
+      permission: $s3_audit.imports.$audit_events_create:uuid
+      project_id: $s3_audit.imports.$metapaas_project:uuid
+
+  $core.iam.rolebinding:
+    s3_audit_role_binding:
+      role: $core.iam.roles.$s3_audit:uuid
+      user: $core.iam.users.$s3_audit_user:uuid
+      project: $s3_audit.imports.$metapaas_project:uuid
+
+  $core.iam.tokens:
+    s3_audit_token:
+      user: $core.iam.users.$s3_audit_user:uuid
+      iam_client: $s3_audit.imports.$var_iam_default_client_uuid:value
+      issuer: f"http://core.local.genesis-core.tech/api/core/v1/iam/clients/{$s3_audit.imports.$var_iam_default_client_uuid:value}"
+      scope: f"project:{$s3_audit.imports.$metapaas_project:uuid}"
+      auto_renew: true
+      expiration_delta: 604800
+
+  $core.config.configs:
+    s3_audit_config:
+      project_id: "12345678-c625-4fee-81d5-f691897b8142"
+      path: /etc/exordos_metapaas/exordos_metapaas.d/audit.conf
+      mode: "0600"
+      target:
+        kind: node
+        node: $s3_audit.imports.$metapaas_cp:uuid
+      on_change:
+        kind: shell
+        command: systemctl try-restart exordos-metapaas-user-api
+      body:
+        kind: text
+        content: |
+          f"
+          [audit_delivery]
+          enabled = true
+          endpoint = {{ audit_endpoint | default('http://audit.local.genesis-core.tech:8080/') }}
+          auth_token = {$core.iam.tokens.$s3_audit_token:access_token}
+          "
