@@ -23,6 +23,7 @@ build:
         - output
 
   elements:
+    - manifest: manifests/s3_audit.yaml.j2
     # Communal shared S3 instance for platform-wide use.
     - manifest: manifests/communal_s3.yaml.j2
     # Grafana dashboard of S3 instances on the shared observability Grafana
