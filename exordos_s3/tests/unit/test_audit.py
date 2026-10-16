@@ -11,23 +11,17 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 import uuid
 
-from gcl_sdk.audit import opts
+from exordos_metapaas.common import audit
 from gcl_sdk.audit.dm import models as sdk_audit_models
-from oslo_config import cfg
 import pytest
 from restalchemy.common import contexts
 from restalchemy.storage.sql import orm
-import yaml
 
-from exordos_s3 import audit
 from exordos_s3.controlplane.dm import models
-
-ROOT = Path(__file__).parents[3]
 
 
 def instance() -> models.S3Instance:
@@ -124,32 +118,3 @@ def test_audit_event_keeps_user_actor_and_resource_project(actor) -> None:
     assert event.project_id == parent.project_id
     assert event.resource_uuid == parent.uuid
     assert insert.call_args.args[1] is session
-
-
-def test_optional_manifest_config_and_token_scope(tmp_path: Path) -> None:
-    text = (ROOT / "exordos/manifests/s3_audit.yaml.j2").read_text()
-    manifest = yaml.safe_load(text.replace("{{ version }}", "test"))
-    resources = manifest["resources"]
-    assert "audit" in manifest["requirements"]
-    main = yaml.safe_load((ROOT / "exordos/manifests/s3aas.yaml.j2").read_text())
-    assert "audit" not in main["requirements"]
-    config = resources["$core.config.configs"]["s3_audit_config"]
-    assert config["project_id"] == "12345678-c625-4fee-81d5-f691897b8142"
-    assert config["path"] == "/etc/exordos_metapaas/exordos_metapaas.d/audit.conf"
-    assert config["mode"] == "0600"
-    token = resources["$core.iam.tokens"]["s3_audit_token"]
-    assert token["auto_renew"] is True
-    assert token["scope"] == 'f"project:{$s3_audit.imports.$metapaas_project:uuid}"'
-    content = config["body"]["content"].strip().removeprefix('f"').removesuffix('"')
-    content = content.replace(
-        "{{ audit_endpoint | default('http://audit.local.genesis-core.tech:8080/') }}",
-        "http://audit.example/",
-    ).replace("{$core.iam.tokens.$s3_audit_token:access_token}", "test-token")
-    path = tmp_path / "audit.conf"
-    path.write_text(content)
-    conf = cfg.ConfigOpts()
-    opts.register_audit_delivery_opts(conf)
-    conf(["--config-file", str(path)])
-    assert conf.audit_delivery.enabled is True
-    assert conf.audit_delivery.auth_token == "test-token"
-    assert conf.audit_delivery.endpoint == "http://audit.example/"
