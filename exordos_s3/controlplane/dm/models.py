@@ -20,6 +20,7 @@ import secrets
 import string
 import typing as tp
 
+from exordos_metapaas.common import audit as audit_models
 from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.common import exceptions as ra_exc
 from restalchemy.dm import filters as dm_filters
@@ -28,7 +29,6 @@ from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
 
-from exordos_s3 import audit as audit_models
 from exordos_s3 import utils as u
 
 # Lengths and alphabets for S3 credential generation
@@ -115,6 +115,7 @@ class S3Version(
     audit_models.AuditLogSQLStorableMixin,
     ua_models.TargetResourceMixin,
 ):
+    __audit_service_name__ = "s3"
     __tablename__ = "s3_versions"
     __audit_resource_type__ = "s3_versions"
 
@@ -128,6 +129,7 @@ class S3Instance(
     models.ModelWithTimestamp,
     audit_models.AuditLogSQLStorableMixin,
 ):
+    __audit_service_name__ = "s3"
     __tablename__ = "s3_instances"
     __audit_resource_type__ = "s3_instances"
 
@@ -244,6 +246,8 @@ class InstanceChildModel(
     ua_models.TargetResourceMixin,
     audit_models.AuditLogSQLStorableMixin,
 ):
+    __audit_service_name__ = "s3"
+
     instance = relationships.relationship(S3Instance, required=True, read_only=True)
 
     def touch_parent(self, session=None):
