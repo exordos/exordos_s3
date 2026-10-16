@@ -698,7 +698,7 @@ wheels = [
 
 [[package]]
 name = "exordos-metapaas"
-version = "1.2.6"
+version = "1.2.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bjoern" },
@@ -710,9 +710,9 @@ dependencies = [
     { name = "requests" },
     { name = "restalchemy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/08/df/c430e28544fa1bb9690efa983e349eeff5fe813739a977d2b98acb2b90b7/exordos_metapaas-1.2.6.tar.gz", hash = "sha256:cd150f4409b7c3ed498ae86604d55f0d2bbdc2afcec8ee3134679685f651058d", size = 200771, upload-time = "2026-10-01T09:03:17.774Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/f5/e34df2004dfa2128a2e5bcca4bc09d8ec46e7c5737a42b31531724e12c8c/exordos_metapaas-1.2.7.tar.gz", hash = "sha256:28d004e2cc184808171a10406961e93d77f8c8f53a0881322c4a910fa3c70308", size = 205137, upload-time = "2026-10-16T08:31:29.244Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/90/1f3c12ca9402d72b3236cd0fa7fb8f92717841c6bf0a4f80b1ea50842d2a/exordos_metapaas-1.2.6-py3-none-any.whl", hash = "sha256:71d770335a6fc610a818206a54a783c5e773746773b48ba62cc6fff24d3066d7", size = 50686, upload-time = "2026-10-01T09:03:16.333Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/ba/b3acd982da552663412c7deeb25e0db504382a90214c014525ffb585f4bd/exordos_metapaas-1.2.7-py3-none-any.whl", hash = "sha256:4fbce4e3b20510321c3b71897885dc7b1b307118146b19cd700ea46d76cb6c9b", size = 57401, upload-time = "2026-10-16T08:31:27.934Z" },
 ]
 
 [[package]]
@@ -757,7 +757,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'test'", specifier = ">=1.0.0" },
     { name = "coverage", marker = "extra == 'test'", specifier = ">=4.0" },
     { name = "exordos", marker = "extra == 'test'", specifier = ">=2.0.0,<4.0.0" },
-    { name = "exordos-metapaas", specifier = ">=0.0.3,<2.0.0" },
+    { name = "exordos-metapaas", specifier = ">=1.2.7,<2.0.0" },
     { name = "gcl-iam", specifier = ">=1.4.0,<2.0.0" },
     { name = "gcl-looper", specifier = ">=1.2.3,<2.0.0" },
     { name = "gcl-sdk", specifier = "==3.6.5" },
