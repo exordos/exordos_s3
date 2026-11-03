@@ -103,7 +103,10 @@ def test_credentials_are_absent_from_snapshots() -> None:
 def test_audit_event_keeps_user_actor_and_resource_project(actor) -> None:
     parent = instance()
     context = SimpleNamespace(
-        iam_context=SimpleNamespace(token_info=SimpleNamespace(user_uuid=actor))
+        iam_context=SimpleNamespace(
+            token_info=SimpleNamespace(user_uuid=actor),
+            introspection_info=mock.Mock(return_value={}),
+        )
     )
     session = mock.Mock()
     with (

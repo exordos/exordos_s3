@@ -32,6 +32,7 @@ from restalchemy.dm import models
 from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
+from restalchemy.storage.sql import orm
 
 from exordos_s3 import utils as u
 
