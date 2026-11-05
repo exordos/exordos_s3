@@ -32,7 +32,6 @@ from restalchemy.dm import models
 from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
-from restalchemy.storage.sql import orm
 
 from exordos_s3 import utils as u
 
@@ -336,8 +335,10 @@ class BucketChildModel(
     models.ModelWithTimestamp,
     models.ModelWithProject,
     ua_models.TargetResourceMixin,
-    orm.SQLStorableMixin,
+    audit_models.AuditLogSQLStorableMixin,
 ):
+    __audit_service_name__ = "s3"
+
     bucket = relationships.relationship(S3Bucket, required=True, read_only=True)
 
     def _validate(self, session=None):
@@ -377,6 +378,7 @@ class BucketChildModel(
 
 class S3ReplicationTarget(BucketChildModel):
     __tablename__ = "s3_replication_targets"
+    __audit_resource_type__ = "s3_replication_targets"
 
     endpoint = properties.property(
         types.String(min_length=1, max_length=2048), required=True
@@ -404,6 +406,12 @@ class S3ReplicationTarget(BucketChildModel):
     )
     synchronous = properties.property(types.Boolean(), default=False)
     disable_proxy = properties.property(types.Boolean(), default=True)
+
+    def dump_to_audit_snapshot(self):
+        snapshot = super().dump_to_audit_snapshot()
+        for field in ("access_key", "secret_key", "session_token"):
+            snapshot.pop(field, None)
+        return snapshot
 
     def get_rules(self, session=None):
         return S3ReplicationRule.objects.get_all(
@@ -492,9 +500,11 @@ class S3ReplicationRule(
     models.ModelWithTimestamp,
     models.ModelWithProject,
     ua_models.TargetResourceMixin,
-    orm.SQLStorableMixin,
+    audit_models.AuditLogSQLStorableMixin,
 ):
     __tablename__ = "s3_replication_rules"
+    __audit_service_name__ = "s3"
+    __audit_resource_type__ = "s3_replication_rules"
 
     target = relationships.relationship(
         S3ReplicationTarget, required=True, read_only=True
