@@ -74,7 +74,8 @@ so the node's logs count against it.
 Each data-plane node limits the RustFS service to 75% of the guest's physical
 RAM (`MemoryMax`). At 70% (`MemoryHigh`), the kernel starts reclaiming memory
 and throttling allocations. These percentages are resolved by systemd on the
-node, so a resized VM gets a matching budget when the service next starts.
+node. After resizing, reboot the node or reload the systemd configuration and
+restart RustFS to apply the new budget.
 The budget includes all processes and memory charged to the service cgroup,
 including its file cache; it is not an RSS-only limit. At least 25% of guest
 RAM remains outside the RustFS budget for the OS and platform agents.
@@ -97,6 +98,19 @@ journalctl -u exordos-metapaas-rustfs.service
 This policy is part of the data-plane image. Updating the control plane alone
 does not modify existing node units; move the instance to an image containing
 the policy through the normal platform update path.
+
+The destructive memory regression is opt-in. On a disposable single-node S3
+guest with `pytest` and `minio` available, run as root:
+
+```sh
+EXORDOS_TEST_DISPOSABLE_S3_NODE=1 python -m pytest -v \
+  exordos_s3/tests/integration/test_memory_pressure.py
+```
+
+It checks the resolved limits, injects allocations into the real RustFS
+cgroup, requires a cgroup OOM and bounded restart, checks that network and
+agent processes survive, and verifies old/new object bytes. Run on different
+VM RAM sizes; never run it on a shared or production node.
 
 ## Bucket replication
 
