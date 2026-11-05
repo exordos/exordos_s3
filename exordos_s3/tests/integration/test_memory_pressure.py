@@ -75,6 +75,7 @@ def test_oom_is_contained_and_objects_survive():
     ram = int(Path("/proc/meminfo").read_text().splitlines()[0].split()[1]) * 1024
     page = os.sysconf("SC_PAGE_SIZE")
     for property_name, percent in (("MemoryHigh", 70), ("MemoryMax", 75)):
+        assert state[property_name] != "infinity", f"{property_name} is unbounded"
         assert abs(int(state[property_name]) - ram * percent // 100) <= page
     assert state["OOMPolicy"] == "kill"
     assert (cgroup / "memory.oom.group").read_text().strip() == "1"
@@ -115,7 +116,9 @@ def test_oom_is_contained_and_objects_survive():
                 "Path(sys.argv[1], 'cgroup.procs').write_text(str(os.getpid())); "
                 "blocks=[]; "
                 "exec('for _ in range(int(sys.argv[2]) // (4 * 1024 * 1024)):'"
-                "'\\n blocks.append(bytearray(4 * 1024 * 1024))'); "
+                # Fill the allocations: zero-filled calloc/mmap alone can
+                # reserve virtual space without faulting in physical pages.
+                "'\\n blocks.append(bytearray(b\"x\" * (4 * 1024 * 1024)))'); "
                 "time.sleep(30)",
                 str(cgroup),
                 str(ram * 85 // 100),
