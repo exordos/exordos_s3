@@ -23,7 +23,13 @@ TimeoutStartSec=300s
 # SIGKILL the leftover process keeps the unit from ever starting again
 TimeoutStopSec=45s
 KillSignal=SIGTERM
-OOMScoreAdjust=-1000
+# Percentages follow the guest's physical RAM, including after a VM resize.
+# Leave at least 25% for the OS and platform agents. Reclaim before the hard
+# limit, then kill the entire storage process group so Restart=always recovers it.
+MemoryHigh=70%
+MemoryMax=75%
+OOMScoreAdjust=0
+OOMPolicy=kill
 LimitNOFILE=1048576
 LimitNPROC=32768
 TasksMax=infinity
