@@ -69,6 +69,49 @@ max by (exordos_s3_instance) (rustfs_cluster_capacity_free_bytes)
 The data disk also holds `/var/log`, bind-mounted from the same file system,
 so the node's logs count against it.
 
+## RustFS memory limits
+
+Each data-plane node limits the RustFS service to 60% of the guest's physical
+RAM (`MemoryMax`). At 55% (`MemoryHigh`), the kernel starts reclaiming memory
+and throttling allocations. These percentages are resolved by systemd on the
+node. After resizing, reboot the node or reload the systemd configuration and
+restart RustFS to apply the new budget.
+The budget includes all processes and memory charged to the service cgroup,
+including its file cache; it is not an RSS-only limit. At least 40% of guest
+RAM remains outside the RustFS budget for the OS and platform agents.
+
+If reclaim cannot keep the service below the hard limit, the kernel kills the
+whole service cgroup (`OOMPolicy=kill`). RustFS has a normal OOM score rather
+than immunity to the kernel OOM killer. The existing restart policy retries
+after 10 seconds; the persistent data mount is retained. Requests can fail
+while RustFS restarts. A repeatedly exceeded limit requires investigating the
+workload or increasing the VM RAM, rather than removing the limit.
+
+On a node, inspect the resolved limits and recovery with:
+
+```sh
+systemctl show exordos-metapaas-rustfs.service \
+  -p MemoryHigh -p MemoryMax -p OOMPolicy -p NRestarts -p Result
+journalctl -u exordos-metapaas-rustfs.service
+```
+
+This policy is part of the data-plane image. Updating the control plane alone
+does not modify existing node units; move the instance to an image containing
+the policy through the normal platform update path.
+
+The destructive memory regression is opt-in. On a disposable single-node S3
+guest with `pytest` and `minio` available, run as root:
+
+```sh
+EXORDOS_TEST_DISPOSABLE_S3_NODE=1 python -m pytest -v \
+  exordos_s3/tests/integration/test_memory_pressure.py
+```
+
+It checks the resolved limits, injects allocations into the real RustFS
+cgroup, requires a cgroup OOM and bounded restart, checks that network and
+agent processes survive, and verifies old/new object bytes. Run on different
+VM RAM sizes; never run it on a shared or production node.
+
 ## Bucket replication
 
 RustFS 1.0.1 exports replication metrics through the same OTLP pipeline, without
