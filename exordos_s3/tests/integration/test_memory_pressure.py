@@ -9,6 +9,7 @@ import io
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -22,6 +23,7 @@ import urllib3
 UNIT = "exordos-metapaas-rustfs.service"
 ESSENTIAL_UNITS = (
     "systemd-networkd.service",
+    "systemd-journald.service",
     "ssh.service",
     "qemu-guest-agent.service",
     "exordos-universal-agent.service",
@@ -74,12 +76,20 @@ def test_oom_is_contained_and_objects_survive():
     assert (cgroup / "memory.events").is_file(), "requires cgroup v2"
     ram = int(Path("/proc/meminfo").read_text().splitlines()[0].split()[1]) * 1024
     page = os.sysconf("SC_PAGE_SIZE")
-    for property_name, percent in (("MemoryHigh", 70), ("MemoryMax", 75)):
+    for property_name, percent in (("MemoryHigh", 55), ("MemoryMax", 60)):
         assert state[property_name] != "infinity", f"{property_name} is unbounded"
         assert abs(int(state[property_name]) - ram * percent // 100) <= page
     assert state["OOMPolicy"] == "kill"
     assert (cgroup / "memory.oom.group").read_text().strip() == "1"
     assert int(Path(f"/proc/{pid}/oom_score_adj").read_text()) >= 0
+    # Base images can socket-activate sshd. Establish a connection before
+    # recording its PID so a normal activation is not mistaken for a restart.
+    with socket.create_connection(("127.0.0.1", 22), timeout=2):
+        pass
+    deadline = time.monotonic() + 10
+    while properties("ssh.service", "ActiveState")["ActiveState"] != "active":
+        assert time.monotonic() < deadline, "sshd did not activate"
+        time.sleep(0.1)
     services = essential_processes()
 
     env = dict(
@@ -104,6 +114,14 @@ def test_oom_is_contained_and_objects_survive():
     try:
         client.put_object(bucket, "before", io.BytesIO(payload), len(payload))
         before = events(cgroup)
+        journal = subprocess.run(
+            ["journalctl", "-k", "-n", "1", "--show-cursor", "-o", "cat", "--no-pager"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+        cursor = journal.rsplit("-- cursor: ", 1)[1].strip()
         # Only this child's allocations are injected into the real RustFS
         # cgroup. It is killed with RustFS by memory.oom.group; the controller
         # and the platform agents remain outside it. The deadline below also
@@ -125,11 +143,32 @@ def test_oom_is_contained_and_objects_survive():
             ],
         )
         deadline = time.monotonic() + 180
+        throttled = False
         while pressure.poll() is None and time.monotonic() < deadline:
             assert essential_processes() == services
+            try:
+                throttled |= events(cgroup)["high"] > before["high"]
+            except FileNotFoundError:
+                # systemd removes the old cgroup between OOM and restart.
+                pass
             time.sleep(1)
         assert pressure.poll() == -signal.SIGKILL, "injector was not OOM-killed"
-        assert events(cgroup)["oom_kill"] > before["oom_kill"]
+        print(f"MemoryHigh throttling observed before OOM: {throttled}")
+        # The kernel journal survives removal of the cgroup. oom_kill alone
+        # would also count a global OOM victim, so require CONSTRAINT_MEMCG.
+        kernel = subprocess.run(
+            ["journalctl", "-k", f"--after-cursor={cursor}", "-o", "cat", "--no-pager"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+        assert any(
+            "constraint=CONSTRAINT_MEMCG" in line
+            and f"oom_memcg={state['ControlGroup']}," in line
+            for line in kernel.splitlines()
+        ), "no RustFS cgroup OOM in the kernel journal"
+        assert "constraint=CONSTRAINT_NONE" not in kernel, "global OOM occurred"
 
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
@@ -148,10 +187,16 @@ def test_oom_is_contained_and_objects_survive():
             assert response.read() == payload
         assert essential_processes() == services
     finally:
+        failed = sys.exc_info()[0] is not None
         if pressure is not None:
             if pressure.poll() is None:
                 pressure.kill()
             pressure.wait(timeout=10)
-        for key in ("before", "after"):
-            client.remove_object(bucket, key)
-        client.remove_bucket(bucket)
+        try:
+            for key in ("before", "after"):
+                client.remove_object(bucket, key)
+            client.remove_bucket(bucket)
+        except Exception:
+            if not failed:
+                raise
+            print(f"Cleanup pending on disposable node: {bucket}")

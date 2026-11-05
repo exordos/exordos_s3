@@ -28,7 +28,7 @@ def _service() -> configparser.SectionProxy:
     return unit["Service"]
 
 
-@pytest.mark.parametrize("setting,percent", [("MemoryHigh", 70), ("MemoryMax", 75)])
+@pytest.mark.parametrize("setting,percent", [("MemoryHigh", 55), ("MemoryMax", 60)])
 def test_rustfs_reserves_guest_memory(setting: str, percent: int) -> None:
     # systemd resolves percentages against the guest's physical RAM, including
     # after a VM resize; an absolute byte count would retain the old budget.

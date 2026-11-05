@@ -71,13 +71,13 @@ so the node's logs count against it.
 
 ## RustFS memory limits
 
-Each data-plane node limits the RustFS service to 75% of the guest's physical
-RAM (`MemoryMax`). At 70% (`MemoryHigh`), the kernel starts reclaiming memory
+Each data-plane node limits the RustFS service to 60% of the guest's physical
+RAM (`MemoryMax`). At 55% (`MemoryHigh`), the kernel starts reclaiming memory
 and throttling allocations. These percentages are resolved by systemd on the
 node. After resizing, reboot the node or reload the systemd configuration and
 restart RustFS to apply the new budget.
 The budget includes all processes and memory charged to the service cgroup,
-including its file cache; it is not an RSS-only limit. At least 25% of guest
+including its file cache; it is not an RSS-only limit. At least 40% of guest
 RAM remains outside the RustFS budget for the OS and platform agents.
 
 If reclaim cannot keep the service below the hard limit, the kernel kills the

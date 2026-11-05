@@ -24,10 +24,10 @@ TimeoutStartSec=300s
 TimeoutStopSec=45s
 KillSignal=SIGTERM
 # Percentages follow the guest's physical RAM, including after a VM resize.
-# Leave at least 25% for the OS and platform agents. Reclaim before the hard
+# Leave at least 40% for the OS and platform agents. Reclaim before the hard
 # limit, then kill the entire storage process group so Restart=always recovers it.
-MemoryHigh=70%
-MemoryMax=75%
+MemoryHigh=55%
+MemoryMax=60%
 OOMScoreAdjust=0
 OOMPolicy=kill
 LimitNOFILE=1048576
