@@ -15,7 +15,6 @@ from types import SimpleNamespace
 from unittest import mock
 import uuid
 
-from exordos_metapaas.common import audit
 from gcl_sdk.audit.dm import models as sdk_audit_models
 import pytest
 from restalchemy.common import contexts
@@ -52,7 +51,7 @@ def instance() -> models.S3Instance:
     ],
 )
 def test_business_models_record_s3_events(model: type) -> None:
-    assert issubclass(model, audit.AuditLogSQLStorableMixin)
+    assert issubclass(model, sdk_audit_models.AuditLogSQLStorableMixin)
     assert model.get_audit_service_name() == "s3"
     assert model.get_audit_resource_type() == model.__tablename__
 
