@@ -24,6 +24,7 @@ import string
 import typing as tp
 from urllib.parse import urlsplit
 
+from gcl_sdk.audit.dm import models as audit_sdk_models
 from gcl_sdk.agents.universal.dm import models as ua_models
 from restalchemy.common import exceptions as ra_exc
 from restalchemy.dm import filters as dm_filters
@@ -31,7 +32,6 @@ from restalchemy.dm import models
 from restalchemy.dm import properties
 from restalchemy.dm import relationships
 from restalchemy.dm import types
-from restalchemy.storage.sql import orm
 
 from exordos_s3 import utils as u
 
@@ -124,10 +124,12 @@ class S3Version(
     models.ModelWithUUID,
     models.ModelWithNameDesc,
     models.ModelWithTimestamp,
-    orm.SQLStorableMixin,
+    audit_sdk_models.AuditLogSQLStorableMixin,
     ua_models.TargetResourceMixin,
 ):
+    __audit_service_name__ = "s3"
     __tablename__ = "s3_versions"
+    __audit_resource_type__ = "s3_versions"
 
     image = properties.property(types.String(max_length=2048))
 
@@ -137,9 +139,13 @@ class S3Instance(
     models.ModelWithNameDesc,
     models.ModelWithProject,
     models.ModelWithTimestamp,
-    orm.SQLStorableMixin,
+    audit_sdk_models.AuditLogSQLStorableMixin,
+    models.SimpleViewMixin,
 ):
+    __audit_service_name__ = "s3"
     __tablename__ = "s3_instances"
+    __audit_resource_type__ = "s3_instances"
+    __audit_excluded_fields__ = frozenset({"root_secret"})
 
     name = properties.property(types.String(min_length=1, max_length=255))
     status = properties.property(
@@ -252,8 +258,10 @@ class InstanceChildModel(
     models.ModelWithTimestamp,
     models.ModelWithProject,
     ua_models.TargetResourceMixin,
-    orm.SQLStorableMixin,
+    audit_sdk_models.AuditLogSQLStorableMixin,
 ):
+    __audit_service_name__ = "s3"
+
     instance = relationships.relationship(S3Instance, required=True, read_only=True)
 
     def touch_parent(self, session=None):
@@ -276,6 +284,7 @@ class InstanceChildModel(
 
 class S3Bucket(InstanceChildModel):
     __tablename__ = "s3_buckets"
+    __audit_resource_type__ = "s3_buckets"
 
     name = properties.property(BucketNameType(), required=True, read_only=True)
     status = properties.property(
@@ -328,8 +337,10 @@ class BucketChildModel(
     models.ModelWithTimestamp,
     models.ModelWithProject,
     ua_models.TargetResourceMixin,
-    orm.SQLStorableMixin,
+    audit_sdk_models.AuditLogSQLStorableMixin,
 ):
+    __audit_service_name__ = "s3"
+
     bucket = relationships.relationship(S3Bucket, required=True, read_only=True)
 
     def _validate(self, session=None):
@@ -369,6 +380,8 @@ class BucketChildModel(
 
 class S3ReplicationTarget(BucketChildModel):
     __tablename__ = "s3_replication_targets"
+    __audit_resource_type__ = "s3_replication_targets"
+    __audit_excluded_fields__ = frozenset({"session_token"})
 
     endpoint = properties.property(
         types.String(min_length=1, max_length=2048), required=True
@@ -484,9 +497,11 @@ class S3ReplicationRule(
     models.ModelWithTimestamp,
     models.ModelWithProject,
     ua_models.TargetResourceMixin,
-    orm.SQLStorableMixin,
+    audit_sdk_models.AuditLogSQLStorableMixin,
 ):
     __tablename__ = "s3_replication_rules"
+    __audit_service_name__ = "s3"
+    __audit_resource_type__ = "s3_replication_rules"
 
     target = relationships.relationship(
         S3ReplicationTarget, required=True, read_only=True
@@ -553,6 +568,7 @@ class S3ReplicationRule(
 
 class S3Policy(InstanceChildModel):
     __tablename__ = "s3_policies"
+    __audit_resource_type__ = "s3_policies"
 
     name = properties.property(
         types.String(min_length=1, max_length=255), required=True
@@ -582,6 +598,7 @@ def _generate_secret_key():
 
 class S3User(InstanceChildModel):
     __tablename__ = "s3_users"
+    __audit_resource_type__ = "s3_users"
 
     name = properties.property(
         types.String(min_length=1, max_length=255), required=True, read_only=True
@@ -613,6 +630,7 @@ class S3UserPolicyAttachment(
     InstanceChildModel,
 ):
     __tablename__ = "s3_user_policy_attachments"
+    __audit_resource_type__ = "s3_user_policy_attachments"
 
     user = relationships.relationship(S3User, required=True)
     policy = relationships.relationship(S3Policy, required=True)
@@ -622,6 +640,7 @@ class S3AccessKey(
     InstanceChildModel,
 ):
     __tablename__ = "s3_access_keys"
+    __audit_resource_type__ = "s3_access_keys"
 
     user = relationships.relationship(S3User, required=True, read_only=True)
     access_key = properties.property(

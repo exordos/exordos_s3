@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -757,10 +757,10 @@ requires-dist = [
     { name = "build", marker = "extra == 'test'", specifier = ">=1.0.0" },
     { name = "coverage", marker = "extra == 'test'", specifier = ">=4.0" },
     { name = "exordos", marker = "extra == 'test'", specifier = ">=2.0.0,<4.0.0" },
-    { name = "exordos-metapaas", specifier = ">=0.0.3,<2.0.0" },
+    { name = "exordos-metapaas", specifier = ">=1.2.7,<2.0.0" },
     { name = "gcl-iam", specifier = ">=1.4.0,<2.0.0" },
     { name = "gcl-looper", specifier = ">=1.2.3,<2.0.0" },
-    { name = "gcl-sdk", specifier = ">=3.7.0,<4.0.0" },
+    { name = "gcl-sdk", specifier = ">=3.7.7,<4.0.0" },
     { name = "minio", specifier = ">=7.2.0,<8.0.0" },
     { name = "mock", marker = "extra == 'test'", specifier = ">=3.0.5,<6.0.0" },
     { name = "mypy", marker = "extra == 'mypy'" },
@@ -817,7 +817,7 @@ wheels = [
 
 [[package]]
 name = "gcl-sdk"
-version = "3.7.5"
+version = "3.7.7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bjoern" },
@@ -832,9 +832,9 @@ dependencies = [
     { name = "restalchemy" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/96/d98936a1292b11729aa0400908558e7e855ce2f1403b1396b2b037e69e47/gcl_sdk-3.7.5.tar.gz", hash = "sha256:520a052cbf7abcbbe0df64d10794fd61c1a6255fc8b09d6843198b6aee4e8b14", size = 410787, upload-time = "2026-10-28T19:52:55.117Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3e/c0/c06a5248f8bf92cd3ab95f1805a2c5ab503694e753b238fe0c6cf8fd2879/gcl_sdk-3.7.7.tar.gz", hash = "sha256:a2410d1acb69822ef89f18cf2b2d0279458fd9308431cb12500d045b24812a14", size = 416290, upload-time = "2026-11-06T11:17:58.215Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/b7/49a8ba078aa541a48665b429da0ce3ee8037f1c45e2878f94c94b1a2b7f7/gcl_sdk-3.7.5-py3-none-any.whl", hash = "sha256:b3cb85ea9559276319545d41b07c4c314616f170e789b649ea8fd777a26aac22", size = 365822, upload-time = "2026-10-28T19:52:53.446Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/32/09965dde2c9a1b203c5fa29d56a7daa276fc8acdf24e5e3eec9deb83c5f0/gcl_sdk-3.7.7-py3-none-any.whl", hash = "sha256:34f90eb2b8eb7183b8c228553cc77ad58fc5d7bade5b1ce762e4c7357b9ee1fb", size = 373121, upload-time = "2026-11-06T11:17:56.724Z" },
 ]
 
 [[package]]
