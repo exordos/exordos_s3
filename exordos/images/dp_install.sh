@@ -38,14 +38,14 @@ sudo apt install -y \
 # Install rustfs binary. The version is pinned and checked: a "latest" archive
 # silently moves (or silently doesn't), and both architectures must run the
 # same release.
-RUSTFS_VERSION="1.0.1"
+RUSTFS_VERSION="1.0.6"
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64)
-        RUSTFS_SHA256="9742e183cb0dfb0d48fa909797af572fe47b7f827569036baa4156e0d3958ee5"
+        RUSTFS_SHA256="4f0bf3fecbe861467427ff506aee22c302cfd5ac8b7dcbde71714f8e5e680dea"
         ;;
     aarch64)
-        RUSTFS_SHA256="1dcfb6ae59702b8e90394157e57450ed219515a1cc63525f730d4e120e9be7b9"
+        RUSTFS_SHA256="fde8485aa2580ad774ba8588b0b51b68790ff28677fb27024ea68d8ab2be8e00"
         ;;
     *)
         echo "Unsupported CPU architecture: $ARCH" >&2
