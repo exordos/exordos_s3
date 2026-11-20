@@ -34,6 +34,7 @@ from restalchemy.dm import relationships
 from restalchemy.dm import types
 
 from exordos_s3 import utils as u
+from exordos_s3 import version_ref as vr
 
 
 def _lock_bucket(session, bucket):
@@ -132,6 +133,15 @@ class S3Version(
     __audit_resource_type__ = "s3_versions"
 
     image = properties.property(types.String(max_length=2048))
+    version_ref = properties.property(types.String(max_length=4096), default="")
+
+    def insert(self, session=None):
+        self.version_ref = vr.build_version_ref(str(self.uuid), self.image)
+        super().insert(session=session)
+
+    def update(self, session=None, force=False):
+        self.version_ref = vr.build_version_ref(str(self.uuid), self.image)
+        super().update(session=session, force=force)
 
 
 class S3Instance(
@@ -183,6 +193,7 @@ class S3Instance(
         ),
     )
     version = relationships.relationship(S3Version, required=True, read_only=True)
+    version_ref = properties.property(types.String(max_length=4096), default="")
 
     def is_distributed(self) -> bool:
         return self.kind == S3InstanceKind.DISTRIBUTED.value

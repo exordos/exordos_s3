@@ -79,8 +79,7 @@ class TestBucketCRUD:
 
         # Verify versioning via S3 API
         client = s3_probe_client
-        ver = client.get_bucket_versioning(Bucket=bucket_name)
-        assert ver.get("Status") == "Enabled"
+        s3_conftest.wait_for_bucket_versioning(client, bucket_name)
 
     def test_create_object_lock_bucket(
         self, s3_api_client, s3_instance_uuid, s3_project_id, s3_probe_client
@@ -167,7 +166,9 @@ class TestS3DataOperations:
         )
 
         client = s3_probe_client
-        s3_conftest.upload_test_object(client, bucket_name, "to-delete")
+        s3_conftest.wait_until_allowed(
+            lambda: s3_conftest.upload_test_object(client, bucket_name, "to-delete")
+        )
 
         client.delete_object(Bucket=bucket_name, Key="to-delete")
 

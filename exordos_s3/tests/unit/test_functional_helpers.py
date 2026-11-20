@@ -54,3 +54,19 @@ def test_upload_missing_bucket_retry_is_bounded():
             helpers.upload_test_object(client, "bucket", "key", b"payload")
     assert exc.value.response["Error"]["Code"] == "NoSuchBucket"
     client.put_object.assert_called_once()
+
+
+def test_bucket_versioning_waits_for_dataplane_setting():
+    client = mock.Mock()
+    client.get_bucket_versioning.side_effect = [{}, {"Status": "Enabled"}]
+    with mock.patch.object(helpers.time, "sleep"):
+        helpers.wait_for_bucket_versioning(client, "bucket")
+    assert client.get_bucket_versioning.call_count == 2
+
+
+def test_bucket_versioning_wait_times_out():
+    client = mock.Mock()
+    client.get_bucket_versioning.return_value = {}
+    with mock.patch.object(helpers.time, "monotonic", side_effect=[0, 121]):
+        with pytest.raises(TimeoutError, match="Versioning for bucket bucket"):
+            helpers.wait_for_bucket_versioning(client, "bucket", timeout=120)

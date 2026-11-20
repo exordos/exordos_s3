@@ -22,6 +22,7 @@ from gcl_sdk.infra import constants as sdk_c
 from gcl_sdk.infra.dm import models as sdk_models
 
 from exordos_s3 import constants as c
+from exordos_s3 import version_ref as vr
 from exordos_s3.controlplane.dm import models
 
 ROOT_DISK_SIZE = 6
@@ -55,6 +56,7 @@ class S3Instance(models.S3Instance, ua_models.InstanceWithDerivativesMixin):
                 "kind",
                 "parity",
                 "version",
+                "version_ref",
                 "project_id",
             )
         )
@@ -105,7 +107,9 @@ class S3Instance(models.S3Instance, ua_models.InstanceWithDerivativesMixin):
                 disks=[
                     {
                         "size": ROOT_DISK_SIZE,
-                        "image": self.version.image,
+                        "image": vr.parse_disk_image(self.version_ref)
+                        if self.version_ref
+                        else self.version.image,
                         "label": "root",
                     },
                     {

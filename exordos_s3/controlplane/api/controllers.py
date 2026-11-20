@@ -36,6 +36,10 @@ class S3VersionController(
 
     __resource__ = ra_resources.ResourceByRAModel(
         model_class=models.S3Version,
+        fields_permissions=field_p.FieldsPermissions(
+            default=field_p.Permissions.RW,
+            fields={"version_ref": {constants.ALL: field_p.Permissions.RO}},
+        ),
         convert_underscore=False,
         process_filters=True,
     )

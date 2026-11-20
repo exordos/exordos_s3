@@ -26,6 +26,7 @@ from gcl_sdk.infra.services import builder
 from restalchemy.dm import filters as dm_filters
 
 from exordos_s3 import constants as c
+from exordos_s3 import version_ref as vr
 from exordos_s3.controlplane import cluster
 from exordos_s3.controlplane.infra.dm import models
 
@@ -201,7 +202,9 @@ class CoreInfraBuilder(builder.CoreInfraBuilder):
             disks=[
                 {
                     "size": models.ROOT_DISK_SIZE,
-                    "image": instance.version.image,
+                    "image": vr.parse_disk_image(instance.version_ref)
+                    if instance.version_ref
+                    else instance.version.image,
                     "label": "root",
                 },
                 {
