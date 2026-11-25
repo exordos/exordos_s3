@@ -23,11 +23,13 @@ from gcl_sdk.agents.universal.drivers import core as core_drivers
 from gcl_sdk.infra import constants as sdk_c
 from gcl_sdk.infra.dm import models as sdk_models
 from gcl_sdk.infra.services import builder
+from restalchemy.common import contexts
 from restalchemy.dm import filters as dm_filters
 
 from exordos_s3 import constants as c
 from exordos_s3 import version_ref as vr
 from exordos_s3.controlplane import cluster
+from exordos_s3.controlplane.dm import models as dm_models
 from exordos_s3.controlplane.infra.dm import models
 
 LOG = logging.getLogger(__name__)
@@ -147,6 +149,21 @@ def render_rustfs_env(
 
 
 class CoreInfraBuilder(builder.CoreInfraBuilder):
+    def _setup(self):
+        super()._setup()
+        repaired = 0
+        with contexts.Context().session_manager() as session:
+            for version in dm_models.S3Version.objects.get_all(
+                session=session, locked=True
+            ):
+                if version.version_ref != vr.build_version_ref(
+                    str(version.uuid), version.image
+                ):
+                    version.update(session=session)
+                    repaired += 1
+        if repaired:
+            LOG.info("Repaired %d stale S3 version references at startup", repaired)
+
     def __init__(
         self,
         core_username: str,
