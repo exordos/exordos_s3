@@ -565,6 +565,23 @@ def wait_for_bucket(
         time.sleep(interval)
 
 
+def wait_for_bucket_versioning(
+    s3_client, bucket_name, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL
+):
+    """Wait for the requested versioning setting to reach the dataplane."""
+    deadline = time.monotonic() + timeout
+    while True:
+        status = s3_client.get_bucket_versioning(Bucket=bucket_name).get("Status")
+        if status == "Enabled":
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"Versioning for bucket {bucket_name} was not enabled within "
+                f"{timeout}s (last status: {status!r})"
+            )
+        time.sleep(interval)
+
+
 def wait_until_denied(operation, timeout=SYNC_TIMEOUT, interval=SYNC_INTERVAL):
     """Wait until an S3 operation starts failing, and return the error.
 

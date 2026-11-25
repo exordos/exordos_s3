@@ -34,6 +34,7 @@ from restalchemy.dm import relationships
 from restalchemy.dm import types
 
 from exordos_s3 import utils as u
+from exordos_s3 import version_ref as vr
 
 
 def _lock_bucket(session, bucket):
@@ -132,6 +133,15 @@ class S3Version(
     __audit_resource_type__ = "s3_versions"
 
     image = properties.property(types.String(max_length=2048))
+    version_ref = properties.property(types.String(max_length=4096), default="")
+
+    def insert(self, session=None):
+        self.version_ref = vr.build_version_ref(str(self.uuid), self.image)
+        super().insert(session=session)
+
+    def update(self, session=None, force=False):
+        self.version_ref = vr.build_version_ref(str(self.uuid), self.image)
+        super().update(session=session, force=force)
 
 
 class S3Instance(
@@ -183,6 +193,7 @@ class S3Instance(
         ),
     )
     version = relationships.relationship(S3Version, required=True, read_only=True)
+    version_ref = properties.property(types.String(max_length=4096), default="")
 
     def is_distributed(self) -> bool:
         return self.kind == S3InstanceKind.DISTRIBUTED.value
@@ -211,7 +222,17 @@ class S3Instance(
 
     def insert(self, session=None):
         self._validate_kind()
+        self._validate_version_ref()
         super().insert(session=session)
+
+    def _validate_version_ref(self):
+        # Empty references retain the legacy related-version image fallback.
+        if self.version_ref and self.version_ref != vr.build_version_ref(
+            str(self.version.uuid), self.version.image
+        ):
+            raise S3ValidationError(
+                details="version_ref must match the selected version UUID and image"
+            )
 
     def get_users(self, session=None):
         return S3User.objects.get_all(
@@ -243,6 +264,10 @@ class S3Instance(
     def update(self, session=None, force=False):
         self._validate_kind()
         self._validate_update(session=session)
+        # A version image may change before its consumers receive the new ref.
+        # Keep status and other unrelated updates possible during that window.
+        if self.properties["version_ref"].is_dirty():
+            self._validate_version_ref()
         super().update(session=session, force=force)
 
     def delete(self, session=None, **kwargs):

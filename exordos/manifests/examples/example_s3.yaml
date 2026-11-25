@@ -22,6 +22,7 @@ resources:
       nodes_number: 1
       kind: "single_node"
       version: $example_s3.imports.$rustfs_1:uuid
+      version_ref: $example_s3.imports.$rustfs_1:version_ref
 
   $s3aas.types.s3.instances.$example_s3.policies:
     test_user_policy:

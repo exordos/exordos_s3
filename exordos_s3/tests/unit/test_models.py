@@ -21,6 +21,7 @@ import uuid as sys_uuid
 
 import pytest
 
+from exordos_s3 import version_ref
 from exordos_s3.controlplane.dm import models
 
 
@@ -116,6 +117,70 @@ class TestInstanceUpdate:
         instance._validate_update()
 
 
+class TestInstanceVersionReference:
+    @pytest.mark.parametrize("operation", ["insert", "update"])
+    @pytest.mark.parametrize("force", [False, True])
+    @pytest.mark.parametrize("invalid", ["malformed", "other-version", "other-image"])
+    def test_rejects_untrusted_reference(self, operation, force, invalid):
+        instance = _instance()
+        if invalid == "malformed":
+            ref = "not-a-version-reference"
+        elif invalid == "other-version":
+            ref = version_ref.build_version_ref(
+                str(sys_uuid.uuid4()), instance.version.image
+            )
+        else:
+            ref = version_ref.build_version_ref(
+                str(instance.version.uuid), "http://untrusted"
+            )
+        instance.version_ref = ref
+        with mock.patch.object(
+            models.audit_sdk_models.AuditLogSQLStorableMixin, operation
+        ) as persist:
+            with pytest.raises(
+                models.S3ValidationError, match="version_ref must match"
+            ):
+                getattr(instance, operation)(
+                    **({"force": force} if operation == "update" else {})
+                )
+            persist.assert_not_called()
+
+    @pytest.mark.parametrize("operation", ["insert", "update"])
+    @pytest.mark.parametrize(
+        "image", ["urn:images:trusted", "https://host:8443/image.raw"]
+    )
+    @pytest.mark.parametrize("empty", [False, True])
+    def test_accepts_selected_version_or_legacy_fallback(self, operation, image, empty):
+        instance = _instance(version_ref="old-ref" if operation == "update" else "")
+        instance.version.image = image
+        # Validate against the image, even if the stored version_ref is stale.
+        instance.version.version_ref = "stale-ref"
+        instance.version_ref = (
+            ""
+            if empty
+            else version_ref.build_version_ref(str(instance.version.uuid), image)
+        )
+        with mock.patch.object(
+            models.audit_sdk_models.AuditLogSQLStorableMixin, operation
+        ) as persist:
+            getattr(instance, operation)()
+            persist.assert_called_once()
+
+    def test_unrelated_update_after_version_image_changes(self):
+        version = models.S3Version(name="rustfs", image="urn:images:old")
+        instance = _instance(
+            version=version,
+            version_ref=version_ref.build_version_ref(str(version.uuid), version.image),
+        )
+        version.image = "urn:images:new"
+        instance.status = models.S3Status.ACTIVE.value
+        with mock.patch.object(
+            models.audit_sdk_models.AuditLogSQLStorableMixin, "update"
+        ) as persist:
+            instance.update()
+            persist.assert_called_once()
+
+
 class TestBucketVersioning:
     @pytest.mark.parametrize("enabled", [False, True])
     @pytest.mark.parametrize("force", [False, True])
@@ -133,7 +198,9 @@ class TestBucketVersioning:
         engine.session_manager.return_value = nullcontext(mock.Mock())
         with (
             mock.patch.object(models.S3Bucket, "_get_engine", return_value=engine),
-            mock.patch.object(models.S3Bucket, "get_replication_targets", return_value=[]),
+            mock.patch.object(
+                models.S3Bucket, "get_replication_targets", return_value=[]
+            ),
             mock.patch.object(models.InstanceChildModel, "update") as update,
         ):
             if enabled:

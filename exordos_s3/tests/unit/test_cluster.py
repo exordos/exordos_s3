@@ -336,6 +336,7 @@ class TestBuildersAgree:
 
     def _instance(self, status: str, members: dict) -> mock.Mock:
         instance = mock.Mock()
+        instance.version_ref = ""
         instance.uuid = sys_uuid.uuid4()
         instance.name = "s3"
         instance.status = status
@@ -423,3 +424,18 @@ class TestBuildersAgree:
         assert instance.members == MEMBERS
         assert instance.ipsv4 == ["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4"]
         assert len(objects) == 5
+
+    def test_instance_update_uses_current_version_image_and_keeps_data_disk(self) -> None:
+        instance = self._instance("ACTIVE", MEMBERS)
+        instance.version_ref = "urn:exordos:s3:version:urn-image"
+        target = self._nodeset("ACTIVE", {})
+        actual = self._nodeset("ACTIVE", NODES)
+        infra = sdk_infra_builder.InfraCollection(infra_objects=((target, actual),))
+
+        with mock.patch.object(cluster, "readiness", return_value=[True] * 4):
+            self._infra_builder().actualize_infra(instance, infra)
+
+        disks = target.disk_spec.disks
+        assert disks[0]["image"] == "urn:images:urn-image"
+        assert disks[1]["label"] == "data"
+        assert disks[1]["size"] == instance.disk_size
