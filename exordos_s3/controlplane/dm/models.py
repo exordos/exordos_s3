@@ -222,7 +222,17 @@ class S3Instance(
 
     def insert(self, session=None):
         self._validate_kind()
+        self._validate_version_ref()
         super().insert(session=session)
+
+    def _validate_version_ref(self):
+        # Empty references retain the legacy related-version image fallback.
+        if self.version_ref and self.version_ref != vr.build_version_ref(
+            str(self.version.uuid), self.version.image
+        ):
+            raise S3ValidationError(
+                details="version_ref must match the selected version UUID and image"
+            )
 
     def get_users(self, session=None):
         return S3User.objects.get_all(
@@ -254,6 +264,10 @@ class S3Instance(
     def update(self, session=None, force=False):
         self._validate_kind()
         self._validate_update(session=session)
+        # A version image may change before its consumers receive the new ref.
+        # Keep status and other unrelated updates possible during that window.
+        if self.properties["version_ref"].is_dirty():
+            self._validate_version_ref()
         super().update(session=session, force=force)
 
     def delete(self, session=None, **kwargs):
