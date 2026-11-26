@@ -101,6 +101,7 @@ class TestRenderRustfsEnv:
             "RUSTFS_CONSOLE_ADDRESS=127.0.0.1:9001\n"
             "RUSTFS_CONSOLE_ENABLE=true\n"
             "RUSTFS_VOLUMES=/var/lib/rustfs/data\n"
+            "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency\n"
             "RUSTFS_OBS_LOGGER_LEVEL=error\n"
             "RUSTFS_NEW_BUCKET_DURABILITY_MODE=inherit\n"
             "RUSTFS_OBS_ENDPOINT=http://127.0.0.1:8430/opentelemetry\n"
@@ -135,6 +136,7 @@ class TestRenderRustfsEnv:
             "RUSTFS_VOLUMES=http://node{1...4}.rustfs.internal:9000/var/lib/rustfs/data"
             in lines
         )
+        assert "RUSTFS_DRIVE_TIMEOUT_PROFILE=high_latency" in lines
         assert (
             "EXORDOS_S3_HOSTS=10.0.0.1=node1.rustfs.internal,"
             "10.0.0.2=node2.rustfs.internal,10.0.0.3=node3.rustfs.internal,"
